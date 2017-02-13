@@ -1,0 +1,74 @@
+<launch>
+    <arg name="DEBUG" default="false"/>
+    <arg name="silentDebug" default="false"/>
+
+    <arg name="uav_name" default="$(optenv UAV_NAME uav1)"/>
+
+    <arg name="gui" default="true"/>
+    <arg name="useCuda" default="false"/>
+    <arg name="method" default="4"/>
+    <arg name="SamplePointSize" default="80"/>
+    <arg name="ScanRadius" default="10"/>
+    <arg name="StepSize" default="20"/>
+    <arg name="NumberOfBins" default="20"/>
+    <arg name="FrameSize" default="240"/>
+    <arg name="publish" default="true"/>
+    <arg name="useOdom" default="true"/>
+    <arg name="cameraRotated" default="false"/>
+    <arg name="RansacNumOfChosen" default="2"/>
+    <arg name="RansacNumOfIter" default="50"/>
+    <arg name="RansacThresholdRad" default="1"/>
+    <arg name="Allsac" default="true"/>
+    <arg name="lastSpeedsSize" default="60"/>
+    <arg name="analyseDuration" default="1"/>
+
+
+
+    <group ns="$(arg uav_name)">
+
+		
+        <node name="optic_flow" pkg="optic_flow" type="optic_flow_node" output="screen" >
+            <param name="DEBUG"		type="bool" value="$(arg DEBUG)"/>
+            <param name="silentDebug" type="bool" value="$(arg silentDebug)"/>
+            <param name="gui"             type="bool" value="$(arg gui)"/>
+            <param name="FrameSize"       type="int" value="$(arg FrameSize)"/>
+            <param name="SamplePointSize" type="int" value="$(arg SamplePointSize)"/>
+            <param name="ScanRadius"    type="int" value="$(arg ScanRadius)"/>
+            <param name="StepSize"	type="int" value="$(arg StepSize)"/>
+            <param name="useCuda"		type="bool" value="$(arg useCuda)"/>
+            <param name="method"	type="int" value="$(arg method)"/>
+            <param name="NumberOfBins"	type="int" value="$(arg NumberOfBins)"/>
+            <param name="publish"         type="bool" value="$(arg publish)"/>
+            <param name="ScaleFactor"	type="int" value="1"/>
+
+
+
+
+            <remap from="odometry" to="mbzirc_odom/new_odom"/>
+            <remap from="camera" to="bluefox/image_raw"/>
+            <remap from="camera_info" to="bluefox/camera_info"/>
+            <remap from="ranger" to="teraranger/range"/>
+
+            <remap from="velocity" to="~velocity"/>
+            <remap from="velocity_raw" to="~velocity_raw"/>
+            <remap from="velocity_stddev" to="~velocity_stddev"/>
+
+
+            <param name="CameraImageCompressed"    type="bool" value="false"/>
+            <param name="cameraRotated"    type="bool" value="$(arg cameraRotated)"/>
+            <param name="useOdom"           type="bool" value="$(arg useOdom)"/>
+
+            <param name="RansacNumOfChosen" type="int" value="$(arg RansacNumOfChosen)"/>
+            <param name="RansacNumOfIter"   type="int" value="$(arg RansacNumOfIter)"/>
+            <param name="RansacThresholdRad"    type="double" value="$(arg RansacThresholdRad)"/>
+            <param name="Allsac"            type="bool" value="$(arg Allsac)"/>
+
+            <param name="lastSpeedsSize"            type="int" value="$(arg lastSpeedsSize)"/>
+            <param name="analyseDuration"            type="double" value="$(arg analyseDuration)"/>
+
+            <rosparam file="$(find optic_flow)/yaml/ost.yaml"/>
+            <rosparam file="$(find optic_flow)/yaml/cam_rot.yaml"/>
+
+        </node>
+    </group>
+</launch>

@@ -1,0 +1,90 @@
+<launch>
+	<arg name="uav_name" default="$(optenv UAV_NAME uav5)"/>
+	<group ns="$(arg uav_name)">
+
+	      <arg name="gui" default="true"/>
+        <arg name="DEBUG" default="false"/>
+        <arg name="useCuda" default="true"/>
+        <arg name="method" default="3"/>
+        <arg name="info" default=""/>
+
+        <arg name="FrameSize" default="240"/>
+        <arg name="SamplePointSize" default="8"/>
+        <arg name="ScanRadius" default="4"/>
+        <arg name="StepSize" default="0"/>
+        <arg name="NumberOfBins" default="20"/>
+
+        <arg name="AccelerationBounding" default="true"/>
+        <arg name="RansacNumOfChosen" default="2"/>
+        <arg name="RansacNumOfIter" default="50"/>
+        <arg name="RansacThresholdRad" default="7"/>
+        <arg name="Allsac" default="true"/>
+        <arg name="lastSpeedsSize" default="60"/>
+        <arg name="analyseDuration" default="1"/>
+				<arg name="publish" default="true"/>
+			  <arg name="cameraRotated" default="true"/>
+        <arg name="useOdom" default="true"/>
+        <arg name="ScaleFactor"	default="1"/>
+        <arg name="storeVideo"	default="false"/>
+	  	
+                <node pkg="rosbag" type="play" name="player"  args="--clock $(env HOME)/ros_workspace/src/mbzirc/ros_nodes/optic_flow/bags/_2016-10-26-12-22-17_viktor_no_yaw_cbm3.bag -s 60" />
+		
+	
+	  	<node name="optic_flow" pkg="optic_flow" type="optic_flow_node" output="screen" >                
+                        <param name="DEBUG"		type="bool" value="$(arg DEBUG)"/>
+                  		 	<param name="gui"             type="bool" value="$(arg gui)"/>
+		 	                  <param name="publish"         type="bool" value="$(arg publish)"/>
+                        <param name="FrameSize"       type="int" value="$(arg FrameSize)"/>
+
+                        <param name="SamplePointSize" type="int" value="$(arg SamplePointSize)"/>
+                        <param name="ScanRadius"    type="int" value="$(arg ScanRadius)"/>
+                        <param name="StepSize"	type="int" value="$(arg StepSize)"/>
+
+        		            <rosparam file="$(find optic_flow)/yaml/ost.yaml"/>
+                        <rosparam file="$(find optic_flow)/yaml/cam_rot.yaml"/>
+        		
+                        <param name="ScaleFactor"	type="int" value="1"/>
+        		
+                        <param name="CameraImagePath"    type="string" value="/uav5/bluefox/image_raw/compressed"/>
+                        <param name="RangerDataPath"    type="string" value="/uav5/teraranger/range"/>
+        		            <param name="CameraImageCompressed"    type="bool" value="true"/>
+
+                        <param name="useCuda"		type="bool" value="$(arg useCuda)"/>
+                        <param name="method"            type="int" value="$(arg method)"/>
+
+                        <param name="useOdom"           type="bool" value="$(arg useOdom)"/>
+                        <param name="NumberOfBins"	type="int" value="$(arg NumberOfBins)"/>
+
+                        <param name="publish"         type="bool" value="$(arg publish)"/>
+                        <param name="cameraRotated"     type="bool" value="$(arg cameraRotated)"/>
+
+
+                        <param name="RansacNumOfChosen" type="int" value="$(arg RansacNumOfChosen)"/>
+                        <param name="RansacNumOfIter"   type="int" value="$(arg RansacNumOfIter)"/>
+                        <param name="RansacThresholdRad" type="double" value="$(arg RansacThresholdRad)"/>
+                        <param name="Allsac"            type="bool" value="$(arg Allsac)"/>
+
+                        <param name="lastSpeedsSize"            type="int" value="$(arg lastSpeedsSize)"/>
+                        <param name="analyseDuration"            type="double" value="$(arg analyseDuration)"/>
+
+                        <param name="cameraRotated"    type="" value="$(arg cameraRotated)"/>
+            
+                        <param name="storeVideo"		type="bool" value="$(arg storeVideo)"/>
+                        <param name="AccelerationBounding" type="bool" value="$(arg AccelerationBounding)"/>
+
+                        <remap from="odometry" to="mbzirc_odom/new_odom"/>
+                        <remap from="camera" to="bluefox/image_raw/compressed"/>
+                        <remap from="camera_info" to="bluefox/camera_info"/>
+                        <remap from="ranger" to="teraranger/range"/>
+
+                        <remap from="velocity" to="~velocity"/>
+                        <remap from="velocity_raw" to="~velocity_raw"/>
+                        <remap from="velocity_stddev" to="~velocity_stddev"/>
+                  </node>
+        
+                  <node pkg="rosbag" type="record" name="recorder"  args="/uav5/mbzirc_odom/new_odom /uav5/optic_flow/velocity /uav5/optic_flow/velocity_raw /uav5/optic_flow/velocity_stddev -O /$(env HOME)/ros_workspace/src/mbzirc/ros_nodes/optic_flow/bags/eval_out/SpeedCompareM$(arg method)B$(arg SamplePointSize)R$(arg ScanRadius)S$(arg StepSize)F$(arg FrameSize)-$(arg info).bag" />
+
+    </group>
+  </launch>
+
+

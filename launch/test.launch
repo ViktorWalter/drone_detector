@@ -4,8 +4,8 @@
 					<arg name="gui" default="true"/>
 					<arg name="method" default="3"/>
 					<arg name="SamplePointSize" default="20"/>
-					<arg name="ScanRadius" default="20"/>
-					<arg name="StepSize" default="0"/>
+					<arg name="ScanRadius" default="1"/>
+					<arg name="StepSize" default="10"/>
 					<arg name="FrameSize" default="1000"/>
 					<arg name="publish" default="true"/>
 					<arg name="useOdom" default="false"/>
@@ -15,7 +15,7 @@
 
 				<group ns="$(arg uav_name)">
 
-	  	            <node name="drone_detector" pkg="drone_detector" type="drone_detector_node" output="screen" >
+          <node name="drone_detector" pkg="drone_detector" type="drone_detector_node" output="screen"> 
 				        <param name="DEBUG"		type="bool" value="$(arg DEBUG)"/> 
 				        <param name="gui"             type="bool" value="$(arg gui)"/>
                         <param name="FrameSize"       type="int" value="$(arg FrameSize)"/>

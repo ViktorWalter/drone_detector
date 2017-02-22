@@ -30,7 +30,7 @@ private:
     int scanRadius;
     int stepSize;
     int scanBlock;
-
+    int viableSD;
     double cx,cy,fx,fy;
     double k1,k2,k3,p1,p2;
     bool storeVideo;

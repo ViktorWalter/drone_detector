@@ -204,7 +204,7 @@ private:
       cv::Mat imCurr_raw;
 
       int key = -1;
-      while (key == -1)
+      while (key != 13)
       {
         vc.read(imCurr_raw);
         imCurr_raw.copyTo(imCurr,mask);

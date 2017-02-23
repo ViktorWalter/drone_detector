@@ -4,7 +4,7 @@
 					<arg name="gui" default="true"/>
 					<arg name="method" default="3"/>
 					<arg name="SamplePointSize" default="20"/>
-					<arg name="ScanRadius" default="1"/>
+					<arg name="ScanRadius" default="8"/>
 					<arg name="StepSize" default="10"/>
 					<arg name="FrameSize" default="1000"/>
 					<arg name="publish" default="true"/>

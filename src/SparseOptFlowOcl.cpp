@@ -3,7 +3,7 @@
 #include <dirent.h>
 #include "ros/package.h"
 
-#define maxCornersPerBlock 20
+#define maxCornersPerBlock 80
 
 SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
     int i_scanRadius,
@@ -136,6 +136,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
         NULL,
         NULL);
 
+  int foundPtsSize = 0;
   cl_mem foundPtsSize_g =
     clCreateBuffer(
         *(cl_context*)(cv::ocl::Context::getContext()->getOpenCLContextPtr()),
@@ -143,6 +144,16 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
         sizeof(cl_int),
         NULL,
         NULL);
+  clEnqueueWriteBuffer(
+      *(cl_command_queue*)(cv::ocl::Context::getContext()->getOpenCLCommandQueuePtr()),
+      foundPtsSize_g,
+      CL_TRUE,
+      0,
+      sizeof(cl_int),
+      &foundPtsSize,
+      0,
+      NULL,
+      NULL);
 
   cv::ocl::oclMat imShowcorn_g = cv::ocl::oclMat(imCurr_g.size(),CV_8UC1);
   imShowcorn_g = cv::Scalar(0);
@@ -159,6 +170,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   int foundPointsWidth_g = foundPointsX_g.step / foundPointsX_g.elemSize();
   int foundPointsOffset_g = foundPointsX_g.offset/ foundPointsX_g.elemSize();
   int foundPtsXOrdOffset_g =foundPtsX_ord_g.offset/ foundPtsX_ord_g.elemSize();
+  int maxCornersPerBlock_g = maxCornersPerBlock;
 
   //    ROS_INFO("\nsrcwidth:%d\nsrcoffset:%d\ndstwidth:%d\ndstoffset:%d\nsps:%d\nss:%d\nsr:%d\nsd:%d\n",imSrcWidth_g,imSrcOffset_g,imDstWidth_g,imDstOffset_g,samplePointSize,stepSize,scanRadius,scanDiameter);
 
@@ -179,6 +191,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPtsY_ord_g.data));
   args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPtsSize_g));
   args.push_back( std::make_pair( sizeof(cl_int), (void *) &foundPtsXOrdOffset_g));
+  args.push_back( std::make_pair( sizeof(cl_int), (void *) &maxCornersPerBlock_g));
 
   cv::ocl::openCLExecuteKernelInterop(cv::ocl::Context::getContext(),
       *program,
@@ -190,7 +203,6 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
       0,
       NULL);
 
-  int foundPtsSize;
   clEnqueueReadBuffer(
       *(cl_command_queue*)(cv::ocl::Context::getContext()->getOpenCLCommandQueuePtr()),
       foundPtsSize_g,
@@ -213,10 +225,11 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   //          0,
   //          NULL,
   //          NULL);
-  if (foundPtsSize > 0)
+  if ( (foundPtsSize > 0) && (true))
   {
-    std::size_t block[3] = {17,17,1};
+    std::size_t block[3] = {viableSD,viableSD,1};
     std::size_t grid[3] = {foundPtsSize,1,1};
+    std::size_t global[3] = {grid[0]*block[0],grid[1]*block[1],1};
 
     args.clear();
     args.push_back( std::make_pair( sizeof(cl_mem), (void *) &imCurr_g.data ));
@@ -225,12 +238,12 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     args.push_back( std::make_pair( sizeof(cl_int), (void *) &imSrcOffset_g));
     args.push_back( std::make_pair( sizeof(cl_int), (void *) &imSrcTrueWidth_g));
     args.push_back( std::make_pair( sizeof(cl_int), (void *) &imSrcTrueHeight_g));
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPtsX_ord_g));
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPtsY_ord_g));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &imSrcOffset_g));
+    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPtsX_ord_g.data));
+    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPtsY_ord_g.data));
     args.push_back( std::make_pair( sizeof(cl_mem), (void *) &imShowcorn_g.data ));
     args.push_back( std::make_pair( sizeof(cl_int), (void *) &imShowCornWidth_g));
     args.push_back( std::make_pair( sizeof(cl_int), (void *) &imShowCornOffset_g));
+    args.push_back( std::make_pair( sizeof(cl_int), (void *) &scanRadius));
     args.push_back( std::make_pair( sizeof(cl_int), (void *) &samplePointSize));
 
     cv::ocl::openCLExecuteKernelInterop(cv::ocl::Context::getContext(),

@@ -26,6 +26,8 @@ private:
     cv::ocl::oclMat foundPointsY_g;
     cv::ocl::oclMat foundPointsX_prev_g;
     cv::ocl::oclMat foundPointsY_prev_g;
+    cl_mem numFoundBlock_g;
+    cl_mem numFoundBlock_prev_g;
 
     int samplePointSize;
     int scanRadius;

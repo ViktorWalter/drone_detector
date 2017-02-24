@@ -5,6 +5,7 @@
 #define FastThresh 30
 #define CornerArraySize 10
 #define maxNumOfBlocks 2000
+#define errorShift -255
 
 
 __kernel void CornerPoints_C1_D0(
@@ -185,120 +186,293 @@ __kernel void OptFlow_C1_D0(
   int posX = foundPtsX[block]; 
   int posY = foundPtsY[block]; 
 
-  if ((posX < (ScanRadius-corner))||(posY < (ScanRadius-corner))||(posX>=(imgSrcTrueWidth-(ScanRadius-corner)))||(posY>=(imgSrcTrueHeight-(ScanRadius-corner))))
-    return;
-
   __local int abssum[arraySize][arraySize];
 
   int repetitions = ceil(ScanDiameter/(float)threadDiameter);
 
   barrier(CLK_LOCAL_MEM_FENCE);
 
-  for (int m=0; m<repetitions; m++)
+  if ((posX >= (ScanRadius-corner))&&(posY >= (ScanRadius-corner))&&(posX<(imgSrcTrueWidth-(ScanRadius-corner)))&&(posY<(imgSrcTrueHeight-(ScanRadius-corner))))
   {
-    for (int n=0; n<repetitions; n++)
-    {
-      int currXshift = n*threadDiameter + threadX;
-      int currYshift = m*threadDiameter + threadY;
-
-      if ((currXshift<ScanDiameter) && (currYshift<ScanDiameter))
-      {
-        abssum[currYshift][currXshift] = 0;
-
-        for (int i=0;i<samplePointSize;i++)
-        {
-          for (int j=0;j<samplePointSize;j++)
-          {
-            atomic_add(&(abssum[currYshift][currXshift]),
-                abs(
-                  input_1[
-                  (imgSrcOffset + posX + i + corner)+
-                  (posY + j + corner)*imgSrcWidth]
-                  -
-                  input_2[
-                  (imgSrcOffset + posX + i + corner + currXshift)+
-                  (posY + j + corner + currYshift)*imgSrcWidth]
-                  )
-                );
-          }
-
-        }
-      }
-    }
-
-    barrier(CLK_LOCAL_MEM_FENCE);
-
-    __local int minval[arraySize];
-    __local signed char minX[arraySize];
-    signed char minY;
-
-        bool tester = false;
-    if (threadY == 0)
+    for (int m=0; m<repetitions; m++)
     {
       for (int n=0; n<repetitions; n++)
       {
         int currXshift = n*threadDiameter + threadX;
-        if (currXshift >= ScanDiameter)
-          break;
-        minval[currXshift] = abssum[currXshift][0];
-        minX[currXshift] = -ScanRadius;
-        for (int i=1;i<ScanDiameter;i++)
+        int currYshift = m*threadDiameter + threadY;
+
+        if ((currXshift<ScanDiameter) && (currYshift<ScanDiameter))
         {
-          if (minval[currXshift] > abssum[currXshift][i])
+          abssum[currYshift][currXshift] = 0;
+
+          for (int i=0;i<samplePointSize;i++)
           {
-            minval[currXshift] = abssum[currXshift][i];
-            minX[currXshift] = i-ScanRadius;
-                 tester = true;
+            for (int j=0;j<samplePointSize;j++)
+            {
+              atomic_add(&(abssum[currYshift][currXshift]),
+                  abs(
+                    input_1[
+                    (imgSrcOffset + posX + i + corner)+
+                    (posY + j + corner)*imgSrcWidth]
+                    -
+                    input_2[
+                    (imgSrcOffset + posX + i + corner + currXshift - ScanRadius)+
+                    (posY + j + corner + currYshift - ScanRadius)*imgSrcWidth]
+                    )
+                  );
+            }
+
           }
         }
       }
-    }
 
-    barrier(CLK_LOCAL_MEM_FENCE);
-    int resX, resY;
+      barrier(CLK_LOCAL_MEM_FENCE);
 
-    if ( (threadY == 0) && (threadX == 0))
-    {
+      __local int minval[arraySize];
+      __local signed char minX[arraySize];
+      signed char minY;
 
-      int minvalFin = minval[0];
-      minY = -ScanRadius;
-      for (int i=1;i<ScanDiameter;i++)
+      bool tester = false;
+      if (threadY == 0)
       {
-        if (minvalFin > minval[i])
+        for (int n=0; n<repetitions; n++)
         {
-          minvalFin = minval[i];
-          minY = i-ScanRadius;
-            tester = true;
+          int currXshift = n*threadDiameter + threadX;
+          if (currXshift >= ScanDiameter)
+            break;
+          minval[currXshift] = abssum[currXshift][0];
+          minX[currXshift] = -ScanRadius;
+          for (int i=1;i<ScanDiameter;i++)
+          {
+            if (minval[currXshift] > abssum[currXshift][i])
+            {
+              minval[currXshift] = abssum[currXshift][i];
+              minX[currXshift] = i-ScanRadius;
+              tester = true;
+            }
+          }
         }
       }
-      resY = minY;
-      resX = minX[minY+ScanRadius];
-      //output_Y[blockY*imgDstWidth+imgDstOffset + blockX] = minY;
-      //output_X[blockY*imgDstWidth+imgDstOffset + blockX] = minX[minY+scanRadius];
 
-      if (((abssum[ScanRadius][ScanRadius] - minvalFin) <= MinValThreshold) && (false))  //if the difference is small, then it is considered to be noise in a uniformly colored area
+      barrier(CLK_LOCAL_MEM_FENCE);
+      int resX, resY;
+
+      if ( (threadY == 0) && (threadX == 0))
       {
-        resY = 0;
-        resX = 0;
-        // output_Y[blockY*imgDstWidth+imgSrcOffset+blockX] = 0;
-        //output_X[blockY*imgDstWidth+imgSrcOffset+blockX] = 0;
+
+        int minvalFin = minval[0];
+        minY = -ScanRadius;
+        for (int i=1;i<ScanDiameter;i++)
+        {
+          if (minvalFin > minval[i])
+          {
+            minvalFin = minval[i];
+            minY = i-ScanRadius;
+            tester = true;
+          }
+        }
+        resY = minY;
+        resX = minX[minY+ScanRadius];
+        //output_Y[blockY*imgDstWidth+imgDstOffset + blockX] = minY;
+        //output_X[blockY*imgDstWidth+imgDstOffset + blockX] = minX[minY+scanRadius];
+
+        if (((abssum[ScanRadius][ScanRadius] - minvalFin) <= MinValThreshold) && (false))  //if the difference is small, then it is considered to be noise in a uniformly colored area
+        {
+          resY = 0;
+          resX = 0;
+          // output_Y[blockY*imgDstWidth+imgSrcOffset+blockX] = 0;
+          //output_X[blockY*imgDstWidth+imgSrcOffset+blockX] = 0;
+        }
+
+        output_view[(posY - resY)*showCornWidth+ (posX - resX)+showCornOffset ] = 255;
+
+        if ((minvalFin) >= MaxAbsDiffThreshold)  //if the value is great, then it is considered to be too noisy, blurred or with too great a shift
+        {
+          resY = errorShift;
+          resX = errorShift;
+          output_view[(posY)*showCornWidth+ (posX)+showCornOffset ] = 100;
+        }
+
       }
-      if (tester)
-      output_view[(posY + resY)*showCornWidth+ (posX+resX)+showCornOffset ] = 255;
-      // if ((minvalFin) >= MaxAbsDiffThreshold)  //if the value is great, then it is considered to be too noisy, blurred or with too great a shift
-      // {
-      //   resY = 0;
-      //   resX = 0;
-      //   return;
-      //   //output_Y[blockY*imgDstWidth+imgSrcOffset+blockX] = 0;
-      //   // output_X[blockY*imgDstWidth+imgSrcOffset+blockX] = 0;
-      // }
 
     }
-
   }
 }
 
+__kernel void OptFlowReduced_C1_D0(
+    __global unsigned char* input_1,
+    __global unsigned char* input_2,
+    int imgSrcWidth,
+    int imgSrcOffset,
+    int imgSrcTrueWidth,
+    int imgSrcTrueHeight,
+    __global ushort* foundPtsX,
+    __global ushort* foundPtsY,
+    __constant ushort* prevFoundBlockX,
+    __constant ushort* prevFoundBlockY,
+    int prevFoundBlockWidth,
+    __constant int* prefNumFound,
+    __global signed char* output_view,
+    int showCornWidth,
+    int showCornOffset,
+    int ScanRadius,
+    int samplePointSize,
+    int prevBlockSize,
+    int prevBlockWidth
+    )
+{
+  int block = get_group_id(0);
+  int blockNum = get_num_groups(0);
+  int threadI = get_local_id(0);
+  int threadNum = get_local_size(0);
+
+  int ScanDiameter = ScanRadius*2+1;
+  int corner = -samplePointSize/2;
+  int posX = foundPtsX[block]; 
+  int posY = foundPtsY[block]; 
+
+  __local int abssum[arraySize*arraySize];
+  __local int Xpositions[arraySize*arraySize];
+  __local int Ypositions[arraySize*arraySize];
+
+  int currBlockX = posX/prevBlockSize;
+  int currBlockY = posY/prevBlockSize;
+
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  int blockShiftX = -1;
+  int blockShiftY = -1;
+  int colNum = 0;
+  int lineNum = (currBlockY + blockShiftY)*prevBlockWidth + (currBlockX + blockShiftX);
+  int pointsHeld = 0;
+
+  while (blockShiftY < -1) {
+    if (blockShiftY <= 1) {
+      int consideredX = prevFoundBlockX[lineNum*prevBlockWidth+colNum];
+      int consideredY = prevFoundBlockY[lineNum*prevBlockWidth+colNum];
+
+      if ((consideredX >= (-corner))&&(consideredY >= (-corner))&&(consideredX<(imgSrcTrueWidth-(-corner)))&&(consideredY<(imgSrcTrueHeight-(-corner)))){
+        Xpositions[pointsHeld] = prevFoundBlockX[lineNum*prevBlockWidth+colNum];
+        Ypositions[pointsHeld] = prevFoundBlockY[lineNum*prevBlockWidth+colNum];
+        pointsHeld++;
+      }
+      if (colNum == prevNumFound[lineNum]) {
+        colNum = 0;
+        if (blockShiftX == 1) {
+          blockShiftX = -1;
+          blockShiftY++;
+        }
+        else {
+          blockShiftX++
+        }
+        lineNum = (currBlockY + blockShiftY)*prevBlockWidth + (currBlockX + blockShiftX);
+      }
+      else {
+        colNum++;
+      }
+    }
+  }
+
+  int repetitions = ceil(pointsHeld/(float)threadNum);
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  for (int n = 0; n < repetitions; n++) {
+    int indexLocal = n*threadNum + threadI;
+    if (indexLocal < pointsHeld) {
+      int posX_prev = Xpositions[indexLocal];
+      int posY_prev = Ypositions[indexLocal];
+      abssum[indexLocal] = 0;
+      for (int i=0;i<samplePointSize;i++) {
+        for (int j=0;j<samplePointSize;j++) {
+          atomic_add(&(abssum[indexLocal]),
+              abs(
+                input_1[
+                (imgSrcOffset + posX + i + corner)+
+                (posY + j + corner)*imgSrcWidth]
+                -
+                input_2[
+                (imgSrcOffset + posX_prev + i + corner)+
+                (posY_prev + j + corner)*imgSrcWidth]
+                )
+              );
+        }
+      }
+    }
+  }
+  barrier(CLK_LOCAL_MEM_FENCE);
+  int resX, resY;
+
+  if ( (threadY == 0) && (threadX == 0))
+  {
+
+    int minval = abssum[0];
+    int minI = 0; 
+
+    for (int i=1;i<pointsHeld;i++)
+    {
+      if (minval > abssum[i])
+      {
+        minval = abssum[i];
+        minI = i;
+      }
+    }
+
+    resX = Xpositions[minI];
+    resY = Ypositions[minI];
+
+    if (((abssum[minI] - minvalFin) <= MinValThreshold) && (false))  //if the difference is small, then it is considered to be noise in a uniformly colored area
+    {
+      resY = 0;
+      resX = 0;
+    }
+
+    output_view[(resY)*showCornWidth+ (resX)+showCornOffset ] = 255;
+
+    if ((minvalFin) >= MaxAbsDiffThreshold)  //if the value is great, then it is considered to be too noisy, blurred or with too great a shift
+    {
+      resY = errorShift;
+      resX = errorShift;
+      output_view[(posY)*showCornWidth+ (posX)+showCornOffset ] = 100;
+    }
+
+  }
+
+}
+}
+
+
+
+return;
+
+
+__local int minval[arraySize];
+__local signed char minX[arraySize];
+signed char minY;
+
+bool tester = false;
+if (threadY == 0)
+{
+  for (int n=0; n<repetitions; n++)
+  {
+    int currXshift = n*threadDiameter + threadX;
+    if (currXshift >= ScanDiameter)
+      break;
+    minval[currXshift] = abssum[currXshift][0];
+    minX[currXshift] = -ScanRadius;
+    for (int i=1;i<ScanDiameter;i++)
+    {
+      if (minval[currXshift] > abssum[currXshift][i])
+      {
+        minval[currXshift] = abssum[currXshift][i];
+        minX[currXshift] = i-ScanRadius;
+        tester = true;
+      }
+    }
+  }
+}
+
+barrier(CLK_LOCAL_MEM_FENCE);
+}
 __kernel void Histogram_C1_D0(__constant signed char* inputX,
     __global signed char* inputY,
     int width,

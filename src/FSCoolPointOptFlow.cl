@@ -346,30 +346,28 @@ __kernel void OptFlowReduced_C1_D0(
   int lineNum = (currBlockY + blockShiftY)*prevBlockWidth + (currBlockX + blockShiftX);
   int pointsHeld = 0;
 
-  while (blockShiftY < -1) {
-    if (blockShiftY <= 1) {
-      int consideredX = prevFoundBlockX[lineNum*prevBlockWidth+colNum];
-      int consideredY = prevFoundBlockY[lineNum*prevBlockWidth+colNum];
+  while (blockShiftY <= 1) {
+    int consideredX = prevFoundBlockX[lineNum*prevFoundBlockWidth+colNum];
+    int consideredY = prevFoundBlockY[lineNum*prevFoundBlockWidth+colNum];
 
-      if ((consideredX >= (-corner))&&(consideredY >= (-corner))&&(consideredX<(imgSrcTrueWidth-(-corner)))&&(consideredY<(imgSrcTrueHeight-(-corner)))){
-        Xpositions[pointsHeld] = prevFoundBlockX[lineNum*prevBlockWidth+colNum];
-        Ypositions[pointsHeld] = prevFoundBlockY[lineNum*prevBlockWidth+colNum];
-        pointsHeld++;
-      }
-      if (colNum == prevFoundNum[lineNum]) {
-        colNum = 0;
-        if (blockShiftX == 1) {
-          blockShiftX = -1;
-          blockShiftY++;
-        }
-        else {
-          blockShiftX++
-        }
-        lineNum = (currBlockY + blockShiftY)*prevBlockWidth + (currBlockX + blockShiftX);
+    if ((consideredX >= (-corner))&&(consideredY >= (-corner))&&(consideredX<(imgSrcTrueWidth-(-corner)))&&(consideredY<(imgSrcTrueHeight-(-corner)))){
+      Xpositions[pointsHeld] = consideredX;
+      Ypositions[pointsHeld] = consideredY;
+      pointsHeld++;
+    }
+    if (colNum == prevFoundNum[lineNum]) {
+      colNum = 0;
+      if (blockShiftX == 1) {
+        blockShiftX = -1;
+        blockShiftY++;
       }
       else {
-        colNum++;
+        blockShiftX++;
       }
+      lineNum = (currBlockY + blockShiftY)*prevBlockWidth + (currBlockX + blockShiftX);
+    }
+    else {
+      colNum++;
     }
   }
 
@@ -402,7 +400,7 @@ __kernel void OptFlowReduced_C1_D0(
   barrier(CLK_LOCAL_MEM_FENCE);
   int resX, resY;
 
-  if ( (threadY == 0) && (threadX == 0))
+  if (threadI == 0)
   {
 
     int minval = abssum[0];
@@ -420,7 +418,12 @@ __kernel void OptFlowReduced_C1_D0(
     resX = Xpositions[minI];
     resY = Ypositions[minI];
 
-    if (((abssum[minI] - minvalFin) <= MinValThreshold) && (false))  //if the difference is small, then it is considered to be noise in a uniformly colored area
+//    if ((resX > imgSrcTrueWidth) || (resX < 0))
+//      return;
+//    if ((resY > imgSrcTrueHeight) || (resY < 0))
+//      return;
+
+    if (((abssum[minI] - minval) <= MaxAbsDiffThreshold) && (false))  //if the difference is small, then it is considered to be noise in a uniformly colored area
     {
       resY = 0;
       resX = 0;
@@ -428,7 +431,7 @@ __kernel void OptFlowReduced_C1_D0(
 
     output_view[(resY)*showCornWidth+ (resX)+showCornOffset ] = 255;
 
-    if ((minvalFin) >= MaxAbsDiffThreshold)  //if the value is great, then it is considered to be too noisy, blurred or with too great a shift
+    if ((minval) >= MinValThreshold)  //if the value is great, then it is considered to be too noisy, blurred or with too great a shift
     {
       resY = errorShift;
       resX = errorShift;
@@ -437,13 +440,9 @@ __kernel void OptFlowReduced_C1_D0(
 
   }
 
-}
-}
-
-
 
 return;
-
+/*
 
 __local int minval[arraySize];
 __local signed char minX[arraySize];
@@ -472,7 +471,11 @@ if (threadY == 0)
 }
 
 barrier(CLK_LOCAL_MEM_FENCE);
+*/
 }
+
+
+
 __kernel void Histogram_C1_D0(__constant signed char* inputX,
     __global signed char* inputY,
     int width,

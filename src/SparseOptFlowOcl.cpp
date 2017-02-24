@@ -225,18 +225,9 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
       0,
       NULL,
       NULL);
+
   ROS_INFO("Number of points for next phase is %d",foundPtsSize);
-  //    int *fondPtsX_ord = new int[foundPtsSize];
-  //    clEnqueueReadBuffer(
-  //          *(cl_command_queue*)(cv::ocl::Context::getContext()->getOpenCLCommandQueuePtr()),
-  //          foundPtsX_ord_g,
-  //          CL_TRUE,
-  //          0,
-  //          sizeof(cl_int)*foundPtsSize,
-  //          foundPtsX_ord,
-  //          0,
-  //          NULL,
-  //          NULL);
+  
   if ( (foundPtsSize > 0) && (true))
   {
     std::size_t blockB[3] = {max_wg_size,1,1};
@@ -277,20 +268,8 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
         0,
         NULL);
   }     
-  imPrev_g.release();
-  imCurr_g.release();
-  //    cv::Mat foundPointsX(cv::Size(maxCornersPerBlock,grid[1]*grid[0]),CV_16UC1);
-  //    cv::Mat foundPointsY(cv::Size(maxCornersPerBlock,grid[1]*grid[0]),CV_16UC1);
-  //    foundPointsX_g.download(foundPointsX);
-  //    foundPointsY_g.download(foundPointsY);
   cv::Mat imshowcorn;
   imShowcorn_g.download(imshowcorn);
-  imShowcorn_g.release();
-  foundPtsX_ord_g.release();
-  foundPtsY_ord_g.release();
-  foundPointsX_g.release();
-  foundPointsY_g.release();
-  clReleaseMemObject(foundPtsSize_g);
 
   clEnqueueCopyBuffer(
       *(cl_command_queue*)(cv::ocl::Context::getContext()->getOpenCLCommandQueuePtr()),
@@ -303,12 +282,10 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
       NULL,
       NULL);
 
+//  clFinish(*(cl_command_queue*)(cv::ocl::Context::getContext()->getOpenCLCommandQueuePtr()));
 
-
-
-
-
-  clFinish(*(cl_command_queue*)(cv::ocl::Context::getContext()->getOpenCLCommandQueuePtr()));
+  foundPointsX_g.copyTo(foundPointsX_prev_g);
+  foundPointsY_g.copyTo(foundPointsY_prev_g);
 
 
   if (debug)
@@ -318,14 +295,9 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   if (gui)
   {
     cv::imshow("corners",imshowcorn);
-    // cv::imshow("X",foundPointsX);
-    //cv::imshow("Y",foundPointsY);
-    //  showFlow(flowx,flowy);
   }
 
   imPrev = imCurr.clone();
-  foundPointsX_prev_g = foundPointsX_g;
-  foundPointsY_prev_g = foundPointsY_g;
 
   first = false;
   return outvec;

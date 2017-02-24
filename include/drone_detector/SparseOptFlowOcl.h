@@ -16,15 +16,16 @@ private:
     bool first;
     char* kernelSource;
     cv::ocl::ProgramSource* program;
+  
+    int max_wg_size;
 
     cv::ocl::oclMat imCurr_g;
     cv::ocl::oclMat imPrev_g;
 
-    cv::ocl::oclMat imflowX_g;
-    cv::ocl::oclMat imflowY_g;
-
-    cv::ocl::oclMat OutVectorX_g;
-    cv::ocl::oclMat OutVectorY_g;
+    cv::ocl::oclMat foundPointsX_g;
+    cv::ocl::oclMat foundPointsY_g;
+    cv::ocl::oclMat foundPointsX_prev_g;
+    cv::ocl::oclMat foundPointsY_prev_g;
 
     int samplePointSize;
     int scanRadius;

@@ -311,7 +311,7 @@ __kernel void OptFlowReduced_C1_D0(
     __constant ushort* prevFoundBlockX,
     __constant ushort* prevFoundBlockY,
     int prevFoundBlockWidth,
-    __constant int* prefNumFound,
+    __constant int* prevFoundNum,
     __global signed char* output_view,
     int showCornWidth,
     int showCornOffset,
@@ -356,7 +356,7 @@ __kernel void OptFlowReduced_C1_D0(
         Ypositions[pointsHeld] = prevFoundBlockY[lineNum*prevBlockWidth+colNum];
         pointsHeld++;
       }
-      if (colNum == prevNumFound[lineNum]) {
+      if (colNum == prevFoundNum[lineNum]) {
         colNum = 0;
         if (blockShiftX == 1) {
           blockShiftX = -1;

@@ -34,6 +34,8 @@ private:
     int stepSize;
     int scanBlock;
     int viableSD;
+    cl_int EfficientWGSize;
+    int foundPtsSize;
     double cx,cy,fx,fy;
     double k1,k2,k3,p1,p2;
     bool storeVideo;
@@ -61,9 +63,13 @@ public:
 
 
 private:
-    void showFlow(const cv::Mat flowx, const cv::Mat flowy);
-    void drawOpticalFlow(const cv::Mat_<signed char>& flowx, const cv::Mat_<signed char>& flowy, cv::Mat& dst, float maxmotion,
-                         int step);
+    void showFlow(const cv::Mat posx, const cv::Mat posy, const cv::Mat flowx, const cv::Mat flowy );
+    void drawOpticalFlow(
+        const cv::Mat_<ushort>& posx,
+        const cv::Mat_<ushort>& posy,
+        const cv::Mat_<short>& flowx,
+        const cv::Mat_<short>& flowy,
+        cv::Mat& dst);
 
 
 

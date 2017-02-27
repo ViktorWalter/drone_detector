@@ -4,6 +4,7 @@
 #include "ros/package.h"
 
 #define maxCornersPerBlock 80
+#define invalidFlow -5555
 
 SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
     int i_scanRadius,
@@ -51,7 +52,32 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
     return;
   }
   cv::ocl::setDevice(devsInfo[0]);
+  cl_device_id devID = *(cl_device_id*)(cv::ocl::Context::getContext()->getOpenCLDeviceIDPtr());
   max_wg_size = (cv::ocl::Context::getContext()->getDeviceInfo().maxWorkGroupSize);
+  char Vendor[50];
+  cl_int ErrCode = clGetDeviceInfo(
+      devID,
+      CL_DEVICE_VENDOR,
+      49,
+      &Vendor,
+      NULL);
+  ROS_INFO("Device vendor is %s",Vendor);
+  if (strcmp(Vendor,"NVIDIA Corporation") == 0)
+      ErrCode = clGetDeviceInfo(
+        devID,
+        CL_DEVICE_WARP_SIZE_NV,
+        sizeof(cl_uint),
+        &EfficientWGSize,
+        NULL);
+  else
+    ErrCode = clGetDeviceInfo(
+        devID,
+        CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
+        sizeof(cl_uint),
+        &EfficientWGSize,
+        NULL);
+
+  ROS_INFO("Warp size is %d",EfficientWGSize);
   viableSD = floor(sqrt(max_wg_size));
   int viableSR = ((viableSD % 2)==1) ? ((viableSD-1)/2) : ((viableSD-2)/2);
 
@@ -144,10 +170,12 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
           NULL);
 
   }
-  cv::ocl::oclMat foundPtsX_ord_g = cv::ocl::oclMat(cv::Size(gridA[1]*gridA[0]*maxCornersPerBlock,1),CV_16SC1);
-  cv::ocl::oclMat foundPtsY_ord_g = cv::ocl::oclMat(cv::Size(gridA[1]*gridA[0]*maxCornersPerBlock,1),CV_16SC1);
+  cv::ocl::oclMat foundPtsX_ord_g = cv::ocl::oclMat(cv::Size(gridA[1]*gridA[0]*maxCornersPerBlock,1),CV_16UC1);
+  cv::ocl::oclMat foundPtsY_ord_g = cv::ocl::oclMat(cv::Size(gridA[1]*gridA[0]*maxCornersPerBlock,1),CV_16UC1);
+  cv::ocl::oclMat foundPtsX_flow_g = cv::ocl::oclMat(cv::Size(gridA[1]*gridA[0]*maxCornersPerBlock,1),CV_16SC1);
+  cv::ocl::oclMat foundPtsY_flow_g = cv::ocl::oclMat(cv::Size(gridA[1]*gridA[0]*maxCornersPerBlock,1),CV_16SC1);
 
-  int foundPtsSize = 0;
+  foundPtsSize = 0;
   cl_mem foundPtsSize_g =
     clCreateBuffer(
         *(cl_context*)(cv::ocl::Context::getContext()->getOpenCLContextPtr()),
@@ -172,6 +200,8 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   foundPointsY_g = cv::Scalar(0);
   foundPtsX_ord_g = cv::Scalar(0);
   foundPtsY_ord_g = cv::Scalar(0);
+  foundPtsX_flow_g = cv::Scalar(invalidFlow);
+  foundPtsY_flow_g = cv::Scalar(invalidFlow);
   int imShowCornWidth_g = imShowcorn_g.step / imShowcorn_g.elemSize();
   int imShowCornOffset_g = imShowcorn_g.offset / imShowcorn_g.elemSize();
   int imSrcWidth_g = imCurr_g.step / imCurr_g.elemSize();
@@ -183,6 +213,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   int foundPtsXOrdOffset_g =foundPtsX_ord_g.offset/ foundPtsX_ord_g.elemSize();
   int maxCornersPerBlock_g = maxCornersPerBlock;
   int foundPointsPrevWidth_g = foundPointsX_prev_g.step / foundPointsX_prev_g.elemSize();
+  int invalidFlowVal_g = invalidFlow;
 
   //    ROS_INFO("\nsrcwidth:%d\nsrcoffset:%d\ndstwidth:%d\ndstoffset:%d\nsps:%d\nss:%d\nsr:%d\nsd:%d\n",imSrcWidth_g,imSrcOffset_g,imDstWidth_g,imDstOffset_g,samplePointSize,stepSize,scanRadius,scanDiameter);
 
@@ -230,12 +261,13 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   
   if ( (foundPtsSize > 0) && (true))
   {
-    std::size_t blockB[3] = {max_wg_size,1,1};
+    std::size_t blockB[3] = {EfficientWGSize,1,1};
     std::size_t gridB[3] = {foundPtsSize,1,1};
     std::size_t globalB[3] = {gridB[0]*blockB[0],1,1};
 
     int blockA_g = blockA[0];
-    int gridA_g = gridA[0];
+    int gridA_width_g = gridA[0];
+    int gridA_height_g = gridA[1];
 
     args.clear();
     args.push_back( std::make_pair( sizeof(cl_mem), (void *) &imCurr_g.data ));
@@ -253,10 +285,13 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     args.push_back( std::make_pair( sizeof(cl_mem), (void *) &imShowcorn_g.data ));
     args.push_back( std::make_pair( sizeof(cl_int), (void *) &imShowCornWidth_g));
     args.push_back( std::make_pair( sizeof(cl_int), (void *) &imShowCornOffset_g));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &scanRadius));
     args.push_back( std::make_pair( sizeof(cl_int), (void *) &samplePointSize));
     args.push_back( std::make_pair( sizeof(cl_int), (void *) &blockA_g));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &gridA_g));
+    args.push_back( std::make_pair( sizeof(cl_int), (void *) &gridA_width_g));
+    args.push_back( std::make_pair( sizeof(cl_int), (void *) &gridA_height_g));
+    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPtsX_flow_g.data));
+    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPtsY_flow_g.data));
+    args.push_back( std::make_pair( sizeof(cl_int), (void *) &invalidFlowVal_g));
 
     cv::ocl::openCLExecuteKernelInterop(cv::ocl::Context::getContext(),
         *program,
@@ -270,6 +305,11 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   }     
   cv::Mat imshowcorn;
   imShowcorn_g.download(imshowcorn);
+  cv::Mat foundPtsX_flow, foundPtsY_flow, foundPtsX_ord, foundPtsY_ord;
+  foundPtsX_flow_g.download(foundPtsX_flow);
+  foundPtsY_flow_g.download(foundPtsY_flow);
+  foundPtsX_ord_g.download(foundPtsX_ord);
+  foundPtsY_ord_g.download(foundPtsY_ord);
 
   clEnqueueCopyBuffer(
       *(cl_command_queue*)(cv::ocl::Context::getContext()->getOpenCLCommandQueuePtr()),
@@ -282,7 +322,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
       NULL,
       NULL);
 
-//  clFinish(*(cl_command_queue*)(cv::ocl::Context::getContext()->getOpenCLCommandQueuePtr()));
+  clFinish(*(cl_command_queue*)(cv::ocl::Context::getContext()->getOpenCLCommandQueuePtr()));
 
   foundPointsX_g.copyTo(foundPointsX_prev_g);
   foundPointsY_g.copyTo(foundPointsY_prev_g);
@@ -294,7 +334,10 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   }
   if (gui)
   {
-    cv::imshow("corners",imshowcorn);
+    if (false)
+      cv::imshow("corners",imshowcorn);
+    else
+      showFlow(foundPtsX_ord,foundPtsY_ord,foundPtsX_flow,foundPtsY_flow);
   }
 
   imPrev = imCurr.clone();
@@ -304,10 +347,10 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
 
 }
 
-void SparseOptFlowOcl::showFlow(const cv::Mat flowx, const cv::Mat flowy )
+void SparseOptFlowOcl::showFlow(const cv::Mat posx, const cv::Mat posy, const cv::Mat flowx, const cv::Mat flowy )
 {
   cv::Mat out;
-  drawOpticalFlow(flowx, flowy, out, 10, stepSize);
+  drawOpticalFlow(posx, posy, flowx, flowy, out );
 
   cv::imshow("Main", imView);
   if (storeVideo)
@@ -316,32 +359,55 @@ void SparseOptFlowOcl::showFlow(const cv::Mat flowx, const cv::Mat flowy )
 }
 
 void SparseOptFlowOcl::drawOpticalFlow(
-    const cv::Mat_<signed char>& flowx,
-    const cv::Mat_<signed char>& flowy,
-    cv::Mat& dst,
-    float maxmotion,
-    int step)
+    const cv::Mat_<ushort>& posx,
+    const cv::Mat_<ushort>& posy,
+    const cv::Mat_<short>& flowx,
+    const cv::Mat_<short>& flowy,
+    cv::Mat& dst)
 {
   imView = imCurr.clone();
 
-  for (int y = 0; y < flowx.rows; y++)
-  {
-    for (int x = 0; x < flowx.cols; x++)
-    {
-      if ((abs(flowx(y, x)) > scanRadius) || (abs(flowy(y, x))> scanRadius))
-      {
-        //ROS_WARN("Flow out of bounds: X:%d, Y:%d",flowx(y, x),flowy(y, x));
-        //continue;
-      }
-      cv::Point2i startPos(x*(step+samplePointSize)+(samplePointSize/2+scanRadius),
-          y*(step+samplePointSize)+(samplePointSize/2+scanRadius));
+  int blockX = imView.cols/viableSD;
+  int blockY = imView.rows/viableSD;
+  if (true){
+    for (int i = 0; i < blockX; i++) {
+      cv::line(
+          imView,
+          cv::Point2i(i*viableSD,0),
+          cv::Point2i(i*viableSD,imView.rows-1),
+          cv::Scalar(100));
+      
+    }
+    for (int i = 0; i < blockY; i++) {
+      cv::line(
+          imView,
+          cv::Point2i(0,i*viableSD),
+          cv::Point2i(imView.cols-1,i*viableSD),
+          cv::Scalar(100));
+    }
+      
+  }
 
-      cv::Point2i u(flowx(y, x), flowy(y, x));
+  for (int i = 0; i < foundPtsSize; i++)
+  {
+    if (flowx.at<short>(0, i) == invalidFlow)
+    {
+      imView.at<char>(posy.at<ushort>(0,i),posx.at<ushort>(0,i)) = 0;
+    }
+    else if (flowx.at<short>(0,i) == 8000)
+    {
+      cv::circle(imView,cv::Point2i(posx.at<ushort>(0,i),posy.at<ushort>(0,i)),2,cv::Scalar(0),CV_FILLED);
+    //  imView.at<char>(posy.at<ushort>(0,i),posx.at<ushort>(0,i)) = 0;
+    }
+    else
+    {
+      cv::Point2i startPos(posx.at<ushort>(0,i),posy.at<ushort>(0,i));
+      cv::Point2i u(flowx.at<short>(0, i), flowy.at<short>(0, i));
       cv::line(imView,
           startPos,
-          startPos+u,
+          u,
           cv::Scalar(255));
-
+      cv::circle(imView,cv::Point2i(posx.at<ushort>(0,i),posy.at<ushort>(0,i)),3,cv::Scalar(0));
     }
   }
   dst = imView;

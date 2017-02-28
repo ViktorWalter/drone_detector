@@ -222,6 +222,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   args.push_back( std::make_pair( sizeof(cl_mem), (void *) &imCurr_g.data ));
   args.push_back( std::make_pair( sizeof(cl_int), (void *) &imSrcWidth_g));
   args.push_back( std::make_pair( sizeof(cl_int), (void *) &imSrcOffset_g));
+  args.push_back( std::make_pair( sizeof(cl_int), (void *) &imSrcTrueWidth_g));
   args.push_back( std::make_pair( sizeof(cl_mem), (void *) &imShowcorn_g.data ));
   args.push_back( std::make_pair( sizeof(cl_int), (void *) &imShowCornWidth_g));
   args.push_back( std::make_pair( sizeof(cl_int), (void *) &imShowCornOffset_g));
@@ -261,7 +262,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   
   if ( (foundPtsSize > 0) && (true))
   {
-    std::size_t blockB[3] = {EfficientWGSize,1,1};
+    std::size_t blockB[3] = {EfficientWGSize,EfficientWGSize,1};
     std::size_t gridB[3] = {foundPtsSize,1,1};
     std::size_t globalB[3] = {gridB[0]*blockB[0],1,1};
 
@@ -337,7 +338,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     if (false)
       cv::imshow("corners",imshowcorn);
     else
-      showFlow(foundPtsX_ord,foundPtsY_ord,foundPtsX_flow,foundPtsY_flow);
+      showFlow(foundPtsX_ord,foundPtsY_ord,foundPtsX_flow,foundPtsY_flow,false);
   }
 
   imPrev = imCurr.clone();
@@ -347,14 +348,15 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
 
 }
 
-void SparseOptFlowOcl::showFlow(const cv::Mat posx, const cv::Mat posy, const cv::Mat flowx, const cv::Mat flowy )
+void SparseOptFlowOcl::showFlow(const cv::Mat posx, const cv::Mat posy, const cv::Mat flowx, const cv::Mat flowy, bool blankBG )
 {
   cv::Mat out;
-  drawOpticalFlow(posx, posy, flowx, flowy, out );
+  
+  drawOpticalFlow(posx, posy, flowx, flowy, blankBG, out );
 
   cv::imshow("Main", imView);
   if (storeVideo)
-    outputVideo << imView;
+    outputVideo << out;
   cv::waitKey(10);
 }
 
@@ -363,9 +365,15 @@ void SparseOptFlowOcl::drawOpticalFlow(
     const cv::Mat_<ushort>& posy,
     const cv::Mat_<short>& flowx,
     const cv::Mat_<short>& flowy,
+    bool blankBG,
     cv::Mat& dst)
 {
-  imView = imCurr.clone();
+  if (blankBG){
+    imView = cv::Mat(imCurr.size(),CV_8UC1); 
+    imView = cv::Scalar(30);
+  }
+  else
+    imView = imCurr.clone();
 
   int blockX = imView.cols/viableSD;
   int blockY = imView.rows/viableSD;
@@ -375,7 +383,7 @@ void SparseOptFlowOcl::drawOpticalFlow(
           imView,
           cv::Point2i(i*viableSD,0),
           cv::Point2i(i*viableSD,imView.rows-1),
-          cv::Scalar(100));
+          cv::Scalar(150));
       
     }
     for (int i = 0; i < blockY; i++) {
@@ -383,7 +391,7 @@ void SparseOptFlowOcl::drawOpticalFlow(
           imView,
           cv::Point2i(0,i*viableSD),
           cv::Point2i(imView.cols-1,i*viableSD),
-          cv::Scalar(100));
+          cv::Scalar(150));
     }
       
   }

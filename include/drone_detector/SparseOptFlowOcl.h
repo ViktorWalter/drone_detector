@@ -63,12 +63,13 @@ public:
 
 
 private:
-    void showFlow(const cv::Mat posx, const cv::Mat posy, const cv::Mat flowx, const cv::Mat flowy );
+    void showFlow(const cv::Mat posx, const cv::Mat posy, const cv::Mat flowx, const cv::Mat flowy, bool blankBG );
     void drawOpticalFlow(
         const cv::Mat_<ushort>& posx,
         const cv::Mat_<ushort>& posy,
         const cv::Mat_<short>& flowx,
         const cv::Mat_<short>& flowy,
+        bool blankBG,
         cv::Mat& dst);
 
 

@@ -1,16 +1,19 @@
 #define i1__at(x,y) input_1[(imgSrcOffset + x)+(y)*imgSrcWidth]
 #define arraySize 50
-#define MinValThreshold (samplePointSize*samplePointSize*20)
-#define MaxAbsDiffThreshold (samplePointSize*samplePointSize*0.5)
+#define MinValThreshold (samplePointSize*samplePointSize*40)//*1*prevFoundNum[currLine])
+#define MaxAbsDiffThreshold (samplePointSize*samplePointSize*10)
 #define FastThresh 30
 #define CornerArraySize 10
 #define maxNumOfBlocks 2000
 #define shiftRadius 1
+#define maxDistMultiplier 1.5
+#define threadsPerCornerPoint 32
 
 __kernel void CornerPoints_C1_D0(
     __global unsigned char* input_1,
     int imgSrcWidth,
     int imgSrcOffset,
+    int imgSrcTrueWidth,
     __global signed char* output_view,
     int showCornWidth,
     int showCornOffset,
@@ -38,7 +41,7 @@ __kernel void CornerPoints_C1_D0(
 
   int repetitions = 1; //ceil(ScanDiameter/(float)threadDiameter);
 
-  int maxij = blockSize*repetitions-3;
+ // int maxij = blockSize*repetitions-3;
   numFoundBlock[blockY*blockNumX+blockX] = 0;
   barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -47,8 +50,10 @@ __kernel void CornerPoints_C1_D0(
     {
       int i = n*blockSize + threadX;
       int j = m*blockSize + threadY;
-
-      if ((i>=3)&&(i<=maxij)&&(j>=3)&&(j<=maxij))
+      int x = blockX*blockSize+i;
+      int y = blockY*blockSize+i;
+      //if ((i>=3)&&(i<=maxij)&&(j>=3)&&(j<=maxij))
+      if ((x>=3)&&(x<=imgSrcTrueWidth-3)&&(y>=3)&&(y<=imgSrcTrueWidth-3))
       {
         uchar I[17];
         I[0] = i1__at(blockX*(blockSize)+i,blockY*(blockSize)+j);
@@ -130,7 +135,7 @@ __kernel void CornerPoints_C1_D0(
             foundPtsY_ord[foundPtsOrdOffset + indexGlobal] =
               blockY*(blockSize)+j;
             barrier(CLK_LOCAL_MEM_FENCE);
-            if (indexLocal > maxCornersPerBlock){
+            if (indexLocal >= maxCornersPerBlock){
               numFoundBlock[blockY*blockNumX+blockX] = maxCornersPerBlock;
             }
           }
@@ -140,27 +145,27 @@ __kernel void CornerPoints_C1_D0(
       }
     }
   return;
-
-  barrier(CLK_GLOBAL_MEM_FENCE);
-  if ((blockX == 0) && (blockY == 0))
-    if ((threadX == 0) && (threadY == 0))
-    {
-      for (int i = 0; i < blockNumX*blockNumY; i++) {
-        int numFound =
-          ((numFoundBlock[i]>maxCornersPerBlock) ? maxCornersPerBlock : numFoundBlock[i]);
-        for (int j = 0; j < numFound; j++) {
-          foundPtsX_ord[foundPtsOrdOffset + foundPtsSize[0]] =
-            foundPointsX[i*foundPointsWidth+foundPointsOffset+j];
-          foundPtsY_ord[foundPtsOrdOffset + foundPtsSize[0]] =
-            foundPointsY[i*foundPointsWidth+foundPointsOffset+j];
-          atomic_inc(&foundPtsSize[0]);
-        }
-
-      }
-
-    }
-
-  return;
+//
+//  barrier(CLK_GLOBAL_MEM_FENCE);
+//  if ((blockX == 0) && (blockY == 0))
+//    if ((threadX == 0) && (threadY == 0))
+//    {
+//      for (int i = 0; i < blockNumX*blockNumY; i++) {
+//        int numFound =
+//          ((numFoundBlock[i]>maxCornersPerBlock) ? maxCornersPerBlock : numFoundBlock[i]);
+//        for (int j = 0; j < numFound; j++) {
+//          foundPtsX_ord[foundPtsOrdOffset + foundPtsSize[0]] =
+//            foundPointsX[i*foundPointsWidth+foundPointsOffset+j];
+//          foundPtsY_ord[foundPtsOrdOffset + foundPtsSize[0]] =
+//            foundPointsY[i*foundPointsWidth+foundPointsOffset+j];
+//          atomic_inc(&foundPtsSize[0]);
+//        }
+//
+//      }
+//
+//    }
+//
+//  return;
 }
 
 
@@ -192,8 +197,10 @@ __kernel void OptFlowReduced_C1_D0(
 {
   int block = get_group_id(0);
   int blockNum = get_num_groups(0);
-  int threadI = get_local_id(0);
-  int threadNum = get_local_size(0);
+  int threadX = get_local_id(0);
+  int threadY = get_local_id(1);
+  int threadNumX = get_local_size(0);
+  int threadNumY = get_local_size(1);
 
   int corner = -samplePointSize/2;
   int posX = foundPtsX[block]; 
@@ -203,8 +210,13 @@ __kernel void OptFlowReduced_C1_D0(
   __local int Xpositions[arraySize*arraySize];
   __local int Ypositions[arraySize*arraySize];
 
+  int samplePointSize2 = samplePointSize*samplePointSize;
+
   int currBlockX = posX/prevBlockSize;
   int currBlockY = posY/prevBlockSize;
+  int currLine = (currBlockY)*prevBlockWidth + (currBlockX);
+
+//  float maxdist2 = (prevBlockSize*prevBlockSize*maxDistMultiplier*maxDistMultiplier);
 
   barrier(CLK_LOCAL_MEM_FENCE);
   //First gather up the previous corner points that are in the vicinity
@@ -214,10 +226,13 @@ __kernel void OptFlowReduced_C1_D0(
   int lineNum;
   int pointsHeld = 0;
 
-  int watchdog = false;
+  bool watchdog = false;
   int counter = 0;
-
+  
   while ((blockShiftY <= shiftRadius)) {
+    if (( blockShiftX > shiftRadius) || ( blockShiftY > shiftRadius) )
+      break;
+
     counter++;
     if (counter == 720) {
       watchdog = true;
@@ -259,13 +274,19 @@ __kernel void OptFlowReduced_C1_D0(
           &&(consideredX<(imgSrcTrueWidth+corner))
           &&(consideredY<(imgSrcTrueHeight+corner))
          ){
-        Xpositions[pointsHeld] = consideredX;
-        Ypositions[pointsHeld] = consideredY;
-        pointsHeld++;
-        colNum++;
+      //  int dx = posX - consideredX;
+      //  int dy = posY - consideredY;
+      //  float dist2 = dx*dx+dy*dy;
+      //  if (dist2 <= maxdist2)
+        {
+          Xpositions[pointsHeld] = consideredX;
+          Ypositions[pointsHeld] = consideredY;
+          pointsHeld++;
+        }
       }
+      colNum++;
     }
-    if (colNum >= (prevFoundNum[lineNum] -shiftRadius)) {
+    if (colNum > (prevFoundNum[lineNum]-1)) {
       colNum = 0;
       if (blockShiftX < shiftRadius) {
         blockShiftX++;
@@ -277,36 +298,47 @@ __kernel void OptFlowReduced_C1_D0(
     }
   }
 
-  int repetitions = ceil(pointsHeld/(float)threadNum);
+  //add current position in the previous image to consideration
+  Xpositions[pointsHeld] = posX;
+  Ypositions[pointsHeld] = posY;
+  pointsHeld++;
+
+
+  int repetitionsOverCorners = ceil(pointsHeld/(float)threadNumX);
+  int repetitionsOverPixels = ceil(samplePointSize2/(float)threadNumY);
   barrier(CLK_LOCAL_MEM_FENCE);
   //Next, Check each of them for match
-  for (int n = 0; n < repetitions; n++) {
-    int indexLocal = n*threadNum + threadI;
+  for (int n = 0; n < repetitionsOverCorners; n++) {
+    int indexLocal = n*threadNumX + threadX;
     if (indexLocal < pointsHeld) {
       int posX_prev = Xpositions[indexLocal];
       int posY_prev = Ypositions[indexLocal];
       abssum[indexLocal] = 0;
-      for (int i=0;i<samplePointSize;i++) {
-        for (int j=0;j<samplePointSize;j++) {
-          atomic_add(&(abssum[indexLocal]),
-              abs(
-                input_1[
-                (imgSrcOffset + posX + i + corner)+
-                (posY + j + corner)*imgSrcWidth]
-                -
-                input_2[
-                (imgSrcOffset + posX_prev + i + corner)+
-                (posY_prev + j + corner)*imgSrcWidth]
+      for (int m=0;m<repetitionsOverPixels;m++) {
+        int indexPixel = n*threadNumY+threadY;
+        int i = indexPixel % samplePointSize;
+        int j = indexPixel / samplePointSize;
+        atomic_add(&(abssum[indexLocal]),
+            abs(
+              input_1[
+              (imgSrcOffset + posX + i + corner)+
+              (posY + j + corner)*imgSrcWidth]
+              -
+              input_2[
+              (imgSrcOffset + posX_prev + i + corner)+
+              (posY_prev + j + corner)*imgSrcWidth]
                 )
               );
-        }
       }
     }
   }
   barrier(CLK_LOCAL_MEM_FENCE);
+  if (pointsHeld == 0)
+    return;
+
   int resX, resY;
 
-  if (threadI == 0)
+  if ((threadX == 0) && (threadY  == 0) )
   {
 
     int minval = abssum[0];
@@ -328,9 +360,15 @@ __kernel void OptFlowReduced_C1_D0(
     //      return;
     //    if ((resY > imgSrcTrueHeight) || (resY < 0))
     //      return;
-
-
-    if ((minval) >= MinValThreshold)  //if the value is great, then it is considered to be too noisy, blurred or with too great a shift
+    if ( (minI < (pointsHeld-1)) && ((abssum[pointsHeld-1] - minval) <= MaxAbsDiffThreshold))  //if the difference is small, then it is considered to be noise in a uniformly colored area
+      {
+     //   resX = Xpositions[pointsHeld-1];
+     //   resY = Ypositions[pointsHeld-1];
+      resY = invalidFlowVal;
+      resX = invalidFlowVal;
+      output_view[(posY)*showCornWidth+ (posX)+showCornOffset ] = 100;
+      }
+    else if ( ((minval) >= MinValThreshold) && (true))  //if the value is great, then it is considered to be too noisy, blurred or with too great a shift
     {
       resY = invalidFlowVal;
       resX = invalidFlowVal;

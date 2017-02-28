@@ -3,7 +3,7 @@
 #include <dirent.h>
 #include "ros/package.h"
 
-#define maxCornersPerBlock 80
+#define maxCornersPerBlock 96
 #define invalidFlow -5555
 
 SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,

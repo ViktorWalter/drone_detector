@@ -1,13 +1,14 @@
 #define i1__at(x,y) input_1[(imgSrcOffset + x)+(y)*imgSrcWidth]
 #define arraySize 50
-#define MinValThreshold (samplePointSize*samplePointSize*40)//*1*prevFoundNum[currLine])
-#define MaxAbsDiffThreshold (samplePointSize*samplePointSize*10)
+#define MinValThreshold (samplePointSize2*10)//*1*prevFoundNum[currLine])
+#define MaxAbsDiffThreshold (samplePointSize2*10)
 #define FastThresh 30
 #define CornerArraySize 10
 #define maxNumOfBlocks 2000
 #define shiftRadius 1
 #define maxDistMultiplier 1.5
 #define threadsPerCornerPoint 32
+#define distanceWeight (samplePointSize2*0.05)
 
 __kernel void CornerPoints_C1_D0(
     __global unsigned char* input_1,
@@ -310,10 +311,17 @@ __kernel void OptFlowReduced_C1_D0(
   //Next, Check each of them for match
   for (int n = 0; n < repetitionsOverCorners; n++) {
     int indexLocal = n*threadNumX + threadX;
+      abssum[indexLocal] = 0;
+      barrier(CLK_LOCAL_MEM_FENCE);
     if (indexLocal < pointsHeld) {
       int posX_prev = Xpositions[indexLocal];
       int posY_prev = Ypositions[indexLocal];
-      abssum[indexLocal] = 0;
+      if (threadY == 0) {
+        int dx = Xpositions[indexLocal] - posX;
+        int dy = Ypositions[indexLocal] - posY;
+        int distPenalty = distanceWeight*(dx*dx+dy*dy);// (int)(distanceWeight*sqrt((float)(dx*dx+dy*dy)));
+        atomic_add(&abssum[indexLocal],distPenalty);
+      }
       for (int m=0;m<repetitionsOverPixels;m++) {
         int indexPixel = n*threadNumY+threadY;
         int i = indexPixel % samplePointSize;
@@ -335,6 +343,7 @@ __kernel void OptFlowReduced_C1_D0(
   barrier(CLK_LOCAL_MEM_FENCE);
   if (pointsHeld == 0)
     return;
+
 
   int resX, resY;
 
@@ -368,7 +377,7 @@ __kernel void OptFlowReduced_C1_D0(
       resX = invalidFlowVal;
       output_view[(posY)*showCornWidth+ (posX)+showCornOffset ] = 100;
       }
-    else if ( ((minval) >= MinValThreshold) && (true))  //if the value is great, then it is considered to be too noisy, blurred or with too great a shift
+    else if ( ((minval) >= MinValThreshold) && (false))  //if the value is great, then it is considered to be too noisy, blurred or with too great a shift
     {
       resY = invalidFlowVal;
       resX = invalidFlowVal;

@@ -1,6 +1,6 @@
 #define i1__at(x,y) input_1[(imgSrcOffset + x)+(y)*imgSrcWidth]
 #define arraySize 50
-#define MinValThreshold (samplePointSize2*10)//*1*prevFoundNum[currLine])
+#define MinValThreshold (samplePointSize2*20)//*1*prevFoundNum[currLine])
 #define MaxAbsDiffThreshold (samplePointSize2*10)
 #define FastThresh 30
 #define CornerArraySize 10
@@ -377,7 +377,7 @@ __kernel void OptFlowReduced_C1_D0(
       resX = invalidFlowVal;
       output_view[(posY)*showCornWidth+ (posX)+showCornOffset ] = 100;
       }
-    else if ( ((minval) >= MinValThreshold) && (false))  //if the value is great, then it is considered to be too noisy, blurred or with too great a shift
+    else if ( ((minval) >= MinValThreshold) && (true))  //if the value is great, then it is considered to be too noisy, blurred or with too great a shift
     {
       resY = invalidFlowVal;
       resX = invalidFlowVal;

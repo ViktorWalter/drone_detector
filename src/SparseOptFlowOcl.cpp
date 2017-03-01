@@ -338,7 +338,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     if (false)
       cv::imshow("corners",imshowcorn);
     else
-      showFlow(foundPtsX_ord,foundPtsY_ord,foundPtsX_flow,foundPtsY_flow,false);
+      showFlow(foundPtsX_ord,foundPtsY_ord,foundPtsX_flow,foundPtsY_flow,true);
   }
 
   imPrev = imCurr.clone();

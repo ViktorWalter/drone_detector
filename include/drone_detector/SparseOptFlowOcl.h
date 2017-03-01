@@ -15,7 +15,10 @@ private:
     bool initialized;
     bool first;
     char* kernelSource;
-    cv::ocl::ProgramSource* program;
+    cl_program prog_CornerPoints;
+    cl_program prog_OptFlow;
+    cl_kernel kernel_CornerPoints;
+    cl_kernel kernel_OptFlow;
   
     int max_wg_size;
 
@@ -44,6 +47,7 @@ private:
     
     cv::Mat imPrev, imCurr, imView;
 
+
 public:
     SparseOptFlowOcl(int i_samplePointSize,
                                          int i_scanRadius,
@@ -54,7 +58,7 @@ public:
                            );
 
     std::vector<cv::Point2f> processImage(
-        cv::Mat imCurr_t,cv::Mat &flow_x,cv::Mat &flow_y,bool gui=true,bool debug=true);
+        cv::Mat imCurr_t,bool gui=true,bool debug=true);
 
     void setImPrev(cv::Mat imPrev_t)
     {

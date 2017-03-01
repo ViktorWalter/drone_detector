@@ -39,9 +39,25 @@ class DroneDetector
 public:
     DroneDetector(ros::NodeHandle& node)
     {
-      std::stringstream VideoPath;
-      VideoPath << SourceDir << "videos/UAVfirst.MP4";
-
+      int VideoNumber = 1;
+      switch (VideoNumber) {
+        case 1:
+          VideoPath << SourceDir << "videos/UAVfirst.MP4";
+          MaskPath << SourceDir << "masks/first.bmp";
+          break;
+        case 2:
+          VideoPath << SourceDir << "videos/UAVfirst.MP4";
+          MaskPath << SourceDir << "masks/first.bmp";
+          break;
+        case 3:
+          VideoPath << SourceDir << "videos/UAVfirst.MP4";
+          MaskPath << SourceDir << "masks/first.bmp";
+          break;
+        case 4:
+          VideoPath << SourceDir << "videos/UAVfirst.MP4";
+          MaskPath << SourceDir << "masks/first.bmp";
+          break;
+      } 
       ROS_INFO("path = %s",VideoPath.str().c_str());
 
       vc.open(VideoPath.str());
@@ -111,36 +127,8 @@ public:
         private_node_handle.getParam("alpha", gamma);
 
 
-        if(DEBUG)
-            ROS_INFO("Waiting for camera parameters..");
-        CamInfoSubscriber = node.subscribe("camera_info",1,&DroneDetector::CameraInfoCallback,this);
         gotCamInfo = false;
         ros::spinOnce();
-        int i = 0;
-        while(i < 100 && !gotCamInfo){
-            usleep(100 * 1000); // wait 100ms
-            ros::spinOnce();
-            if(DEBUG)
-                ROS_INFO("Still waiting for camera parameters.. (%d)",i);
-            i++;
-        }
-        if(!gotCamInfo){
-            ROS_WARN("Drone Detector missing camera calibration parameters! (nothing on camera_info topic). Loaded default parameters");
-            std::vector<double> camMat;
-            private_node_handle.getParam("camera_matrix/data", camMat);
-            fx = camMat[0];
-            cx = camMat[2];
-            fy = camMat[4];
-            cy = camMat[5];
-            std::vector<double> distCoeffs;
-            private_node_handle.getParam("distortion_coefficients/data",distCoeffs);
-            k1 = distCoeffs[0];
-            k2 = distCoeffs[1];
-            k3 = distCoeffs[4];
-            p1 = distCoeffs[2];
-            p2 = distCoeffs[3];
-            gotCamInfo = true;
-        }
 
         imPrev = cv::Mat(frameSize,frameSize,CV_8UC1);
         imPrev = cv::Scalar(0);
@@ -158,11 +146,7 @@ public:
 
         // Camera info subscriber
 
-        RangeSubscriber = node.subscribe("ranger",1,&DroneDetector::RangeCallback, this);
 
-        if (useOdom){
-            TiltSubscriber = node.subscribe("odometry",1,&DroneDetector::CorrectTilt, this);
-        }
 
         if (ImgCompressed){
             ImageSubscriber = node.subscribe("camera", 1, &DroneDetector::ProcessCompressed, this);
@@ -198,121 +182,25 @@ private:
     {
       cv::RNG rng(12345);
       
-      std::stringstream maskpath;
-      maskpath << SourceDir << "masks/first.bmp";
-      cv::Mat mask = cv::imread(maskpath.str().c_str());
+      cv::Mat mask = cv::imread(MaskPath.str().c_str());
       cv::Mat imCurr_raw;
 
       int key = -1;
       while (key != 13)
       {
+        imCurr = cv::Scalar(0);
         vc.read(imCurr_raw);
         imCurr_raw.copyTo(imCurr,mask);
-       // cv::Mat imCurr_s;       
-       // cv::resize(imCurr,imCurr_s,cv::Size(192,108));
-       // cv::imshow("miniature",imCurr_s);
-       // 
-       // cv::imshow("viewer",imCurr);
-       // cv::waitKey(10);
-       // continue;
-
-/*
-        std::stringstream storepath;
-        storepath << SourceDir << "masks/first_t.bmp";
-        cv::imwrite(storepath.str().c_str(),imCurr);
-        return;
-*/
-
-        cv::Mat OptFlowImg_x;
-        cv::Mat OptFlowImg_y;
         cvtColor(imCurr, imCurr, CV_RGB2GRAY);
-//        cv::resize(imCurr,imCurr,cv::Size(imCurr.size().width/8,imCurr.size().height/8));
 
        bmm->processImage(
-           imCurr,
-           OptFlowImg_x,
-           OptFlowImg_y);
+           imCurr
+           );
 
-       // cv::imshow("flowx",OptFlowImg_x);
-       // cv::imshow("flowy",OptFlowImg_y);
-
-       // std::vector<vector<cv::Point> > contours;
-       // vector<cv::Vec4i> hierarchy;
-
-       // cv::Mat FlowEdgesImg_x;
-       // cv::Mat OptFlowImg_x_s;
-       // OptFlowImg_x = OptFlowImg_x + scanRadius;
-       // OptFlowImg_x.convertTo(OptFlowImg_x_s,CV_8UC1);
-       // Canny(OptFlowImg_x_s,FlowEdgesImg_x,scanRadius,scanRadius*1.5);
-       // cv::imshow("canny_x",FlowEdgesImg_x);
-
-       // cv::Mat FlowEdgesImg_y;
-       // cv::Mat OptFlowImg_y_s;
-       // OptFlowImg_y = OptFlowImg_y + scanRadius;
-       // OptFlowImg_y.convertTo(OptFlowImg_y_s,CV_8UC1);
-       // Canny(OptFlowImg_y_s,FlowEdgesImg_y,scanRadius,scanRadius*1.5);
-       // cv::imshow("canny_y",FlowEdgesImg_y);
-
-/*
-        cv::findContours(FlowEdgesImg, contours,hierarchy,CV_RETR_TREE,CV_CHAIN_APPROX_SIMPLE,cv::Point(0,0));
-
-        cv::Mat drawing = cv::Mat::zeros( FlowEdgesImg.size(), CV_8UC3 );
-        for( int i = 0; i< contours.size(); i++ )
-        {
-          cv::Scalar color = cv::Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
-          cv::drawContours( drawing, contours, i, color, 2, 8, hierarchy, 0, cv::Point() );
-        }
-        cv::imshow( "Contours", drawing );
-_x
-
-        imPrev = imCurr;*/
         key = cv::waitKey(10);
       }
     }
 
-
-
-    void RangeCallback(const sensor_msgs::Range& range_msg)
-    {
-        if (range_msg.range < 0.001) //zero
-        {
-            return;
-        }
-
-        currentRange = range_msg.range;
-        if (!useOdom)
-        {
-            ros::Duration sinceLast = RangeRecTime -ros::Time::now();
-            Zvelocity = (currentRange - prevRange)/sinceLast.toSec();
-            trueRange = currentRange;
-            RangeRecTime = ros::Time::now();
-            prevRange = currentRange;
-        }
-
-    }
-
-    void CorrectTilt(const nav_msgs::Odometry odom_msg)
-    {
-        tf::Quaternion bt;
-        tf::quaternionMsgToTF(odom_msg.pose.pose.orientation,bt);
-        tf::Matrix3x3(bt).getRPY(roll, pitch, yaw);
-        Zvelocity = odom_msg.twist.twist.linear.z;
-
-        angVel = cv::Point2d(odom_msg.twist.twist.angular.y,odom_msg.twist.twist.angular.x);
-
-
-        odomSpeed = cv::Point2f(odom_msg.twist.twist.linear.x,odom_msg.twist.twist.linear.y);
-        odomSpeedTime = ros::Time::now();
-
-        if (currentRange > maxTerraRange)
-        {
-            trueRange = odom_msg.pose.pose.position.z;
-        }
-        else
-        {
-            trueRange = cos(pitch)*cos(roll)*currentRange;
-        }
-    }
 
 
     void ProcessCompressed(const sensor_msgs::CompressedImageConstPtr& image_msg)
@@ -330,46 +218,11 @@ _x
     }
 
 
-    void CameraInfoCallback(const sensor_msgs::CameraInfo cam_info){
-        // TODO: deal with binning
-        gotCamInfo = true;
-        if(cam_info.binning_x != 0){
-            ROS_WARN("TODO : deal with binning when loading camera parameters.");
-        }
-        fx = cam_info.K.at(0);
-        fy = cam_info.K.at(4);
-        cx = cam_info.K.at(2);
-        cy = cam_info.K.at(5);
-        k1 = cam_info.D.at(0);
-        k2 = cam_info.D.at(1);
-        p1 = cam_info.D.at(2);
-        p2 = cam_info.D.at(3);
-        k3 = cam_info.D.at(4);
-        if(DEBUG)
-            ROS_INFO("Camera params: %f %f %f %f %f %f %f %f %f",fx,fy,cx,cy,k1,k2,p1,p2,k3);
-        CamInfoSubscriber.shutdown();
-    }
-
     void Process(const cv_bridge::CvImagePtr image)
     {
         // First things first
         if (first)
         {
-            /* not needed, because we are subscribed to camera_info topic
-            if (ScaleFactor == 1)
-            {
-                int parameScale = image->image.cols/expectedWidth;
-                fx = fx*parameScale;
-                cx = cx*parameScale;
-                fy = fy*parameScale;
-                cy = cy*parameScale;
-                k1 = k1*parameScale;
-                k2 = k2*parameScale;
-                k3 = k3*parameScale;
-                p1 = p1*parameScale;
-                p2 = p2*parameScale;
-
-            }*/
 
             if(DEBUG){
                 ROS_INFO("Source img: %dx%d", image->image.cols, image->image.rows);
@@ -422,6 +275,8 @@ _x
 private:
 
     cv::VideoCapture vc;
+    std::stringstream VideoPath;
+    std::stringstream MaskPath;
 
     bool first;
 

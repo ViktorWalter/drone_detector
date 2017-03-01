@@ -10,7 +10,7 @@
 #define threadsPerCornerPoint 32
 #define distanceWeight (samplePointSize2*0.05)
 
-__kernel void CornerPoints_C1_D0(
+__kernel void CornerPoints(
     __global unsigned char* input_1,
     int imgSrcWidth,
     int imgSrcOffset,
@@ -170,7 +170,7 @@ __kernel void CornerPoints_C1_D0(
 }
 
 
-__kernel void OptFlowReduced_C1_D0(
+__kernel void OptFlowReduced(
     __global unsigned char* input_1,
     __global unsigned char* input_2,
     int imgSrcWidth,

@@ -10,12 +10,14 @@
 					<arg name="publish" default="true"/>
 					<arg name="useOdom" default="false"/>
 					<arg name="cameraRotated" default="false"/>
+					<arg name="VideoNumber" default="1"/>
 
 				<group ns="$(arg uav_name)">
 
           <node name="drone_detector" pkg="drone_detector" type="drone_detector_node" output="screen"> 
 				        <param name="DEBUG"		type="bool" value="$(arg DEBUG)"/> 
 				        <param name="gui"             type="bool" value="$(arg gui)"/>
+                        <param name="VideoNumber"     type="int" value="$(arg VideoNumber)"/>
                         <param name="FrameSize"       type="int" value="$(arg FrameSize)"/>
                         <param name="SamplePointSize" type="int" value="$(arg SamplePointSize)"/>
                         <param name="ScanRadius"    type="int" value="$(arg ScanRadius)"/>

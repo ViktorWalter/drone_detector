@@ -39,23 +39,25 @@ class DroneDetector
 public:
     DroneDetector(ros::NodeHandle& node)
     {
-      int VideoNumber = 1;
+        ros::NodeHandle private_node_handle("~");
+
+        private_node_handle.param("VideoNumber", VideoNumber, int(1));
       switch (VideoNumber) {
         case 1:
           VideoPath << SourceDir << "videos/UAVfirst.MP4";
           MaskPath << SourceDir << "masks/first.bmp";
           break;
         case 2:
-          VideoPath << SourceDir << "videos/UAVfirst.MP4";
-          MaskPath << SourceDir << "masks/first.bmp";
+          VideoPath << SourceDir << "videos/UAVsecond.MOV";
+          MaskPath << SourceDir << "masks/second.bmp";
           break;
         case 3:
-          VideoPath << SourceDir << "videos/UAVfirst.MP4";
-          MaskPath << SourceDir << "masks/first.bmp";
+          VideoPath << SourceDir << "videos/UAVthird.MOV";
+          MaskPath << SourceDir << "masks/third.bmp";
           break;
         case 4:
-          VideoPath << SourceDir << "videos/UAVfirst.MP4";
-          MaskPath << SourceDir << "masks/first.bmp";
+          VideoPath << SourceDir << "videos/CameraTomas.MP4)";
+          MaskPath << SourceDir << "masks/fourth.bmp";
           break;
       } 
       ROS_INFO("path = %s",VideoPath.str().c_str());
@@ -74,7 +76,6 @@ public:
 
         checkAccel = false;
 
-        ros::NodeHandle private_node_handle("~");
         private_node_handle.param("DEBUG", DEBUG, bool(false));
 
         private_node_handle.param("method", method, int(0));
@@ -190,6 +191,8 @@ private:
       {
         imCurr = cv::Scalar(0);
         vc.read(imCurr_raw);
+       // cv::imwrite(MaskPath.str().c_str(),imCurr_raw);
+
         imCurr_raw.copyTo(imCurr,mask);
         cvtColor(imCurr, imCurr, CV_RGB2GRAY);
 
@@ -277,6 +280,7 @@ private:
     cv::VideoCapture vc;
     std::stringstream VideoPath;
     std::stringstream MaskPath;
+    int VideoNumber;
 
     bool first;
 

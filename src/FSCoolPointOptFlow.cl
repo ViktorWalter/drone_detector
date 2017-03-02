@@ -9,8 +9,9 @@
 #define maxDistMultiplier 1.5
 #define threadsPerCornerPoint 32
 #define distanceWeight (samplePointSize2*0.05)
+#define excludedPoint -1
 
-__kernel void CornerPoints(
+__kernel void CornerPoints_C1_D0(
     __global unsigned char* input_1,
     int imgSrcWidth,
     int imgSrcOffset,
@@ -18,11 +19,9 @@ __kernel void CornerPoints(
     __global signed char* output_view,
     int showCornWidth,
     int showCornOffset,
-    __global ushort* foundPointsX,
-    __global ushort* foundPointsY,
+    __global int* foundPointsX,
+    __global int* foundPointsY,
     __global int* numFoundBlock,
-    int foundPointsWidth,
-    int foundPointsOffset,
     __global ushort* foundPtsX_ord,
     __global ushort* foundPtsY_ord,
     __global int* foundPtsSize,
@@ -125,10 +124,10 @@ __kernel void CornerPoints(
             {
               output_view[(blockY*(blockSize)+j)*showCornWidth + (showCornOffset+blockX*(blockSize)+i) ] = 30;
               foundPointsX[
-                (blockY*blockNumX+blockX)*foundPointsWidth + foundPointsOffset + indexLocal] =
+                (blockY*blockNumX+blockX)*maxCornersPerBlock + indexLocal]=
                   blockX*(blockSize)+i;
               foundPointsY[
-                (blockY*blockNumX+blockX)*foundPointsWidth + foundPointsOffset + indexLocal] =
+                (blockY*blockNumX+blockX)*maxCornersPerBlock + indexLocal]=
                   blockY*(blockSize)+j;
             }
             foundPtsX_ord[foundPtsOrdOffset + indexGlobal] =
@@ -170,7 +169,7 @@ __kernel void CornerPoints(
 }
 
 
-__kernel void OptFlowReduced(
+__kernel void OptFlowReduced_C1_D0(
     __global unsigned char* input_1,
     __global unsigned char* input_2,
     int imgSrcWidth,
@@ -179,10 +178,10 @@ __kernel void OptFlowReduced(
     int imgSrcTrueHeight,
     __global ushort* foundPtsX,
     __global ushort* foundPtsY,
-    __constant short* prevFoundBlockX,
-    __constant short* prevFoundBlockY,
-    int prevFoundBlockWidth,
+    __global int* prevFoundBlockX,
+    __global int* prevFoundBlockY,
     __constant int* prevFoundNum,
+    int maxCornersPerBlock,
     __global signed char* output_view,
     int showCornWidth,
     int showCornOffset,
@@ -210,6 +209,7 @@ __kernel void OptFlowReduced(
   __local int abssum[arraySize*arraySize];
   __local int Xpositions[arraySize*arraySize];
   __local int Ypositions[arraySize*arraySize];
+  __local int Indices[arraySize*arraySize];
 
   int samplePointSize2 = samplePointSize*samplePointSize;
 
@@ -259,9 +259,10 @@ __kernel void OptFlowReduced(
 
     lineNum = (currBlockY + blockShiftY)*prevBlockWidth + (currBlockX + blockShiftX);
     if (prevFoundNum[lineNum] > 0) {
-      int consideredX = prevFoundBlockX[lineNum*prevFoundBlockWidth+colNum];
-      int consideredY = prevFoundBlockY[lineNum*prevFoundBlockWidth+colNum];
-
+      int consideredX;
+      int consideredY;
+      consideredX = prevFoundBlockX[lineNum*maxCornersPerBlock+colNum];
+      consideredY = prevFoundBlockY[lineNum*maxCornersPerBlock+colNum];
       if (pointsHeld > 0)
         if ((consideredX == Xpositions[pointsHeld-1]) && (consideredY == Ypositions[pointsHeld-1])){
           watchdog = true;
@@ -274,6 +275,7 @@ __kernel void OptFlowReduced(
           &&(consideredY >= (-corner))
           &&(consideredX<(imgSrcTrueWidth+corner))
           &&(consideredY<(imgSrcTrueHeight+corner))
+          &&(consideredX != excludedPoint)
          ){
       //  int dx = posX - consideredX;
       //  int dy = posY - consideredY;
@@ -282,6 +284,7 @@ __kernel void OptFlowReduced(
         {
           Xpositions[pointsHeld] = consideredX;
           Ypositions[pointsHeld] = consideredY;
+          Indices[pointsHeld] = lineNum*maxCornersPerBlock+colNum;
           pointsHeld++;
         }
       }
@@ -390,6 +393,11 @@ __kernel void OptFlowReduced(
     {
       resX = 8000;
       resY = 8000;
+    }
+    
+    if (resX != invalidFlowVal) {
+      prevFoundBlockX[Indices[minI]] = excludedPoint;
+      prevFoundBlockY[Indices[minI]] = excludedPoint;
     }
 
     outputOffsetX[block] = resX;

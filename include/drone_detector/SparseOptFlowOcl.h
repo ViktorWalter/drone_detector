@@ -15,6 +15,7 @@ private:
     bool initialized;
     bool first;
     char* kernelSource;
+    cv::ocl::ProgramSource* program;
     cl_program prog_CornerPoints;
     cl_program prog_OptFlow;
     cl_kernel kernel_CornerPoints;
@@ -25,10 +26,15 @@ private:
     cv::ocl::oclMat imCurr_g;
     cv::ocl::oclMat imPrev_g;
 
-    cv::ocl::oclMat foundPointsX_g;
-    cv::ocl::oclMat foundPointsY_g;
-    cv::ocl::oclMat foundPointsX_prev_g;
-    cv::ocl::oclMat foundPointsY_prev_g;
+//    cv::ocl::oclMat foundPointsX_g;
+//    cv::ocl::oclMat foundPointsY_g;
+//    cv::ocl::oclMat foundPointsX_prev_g;
+//    cv::ocl::oclMat foundPointsY_prev_g;
+
+    cl_mem foundPointsX_g;
+    cl_mem foundPointsY_g;
+    cl_mem foundPointsX_prev_g;
+    cl_mem foundPointsY_prev_g;
     cl_mem numFoundBlock_g;
     cl_mem numFoundBlock_prev_g;
 

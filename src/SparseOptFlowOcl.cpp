@@ -103,7 +103,8 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
     int i_k1,int i_k2,int i_k3,int i_p1,int i_p2,
     bool i_storeVideo,
     int i_cellSize,
-    int i_cellOverlay)
+    int i_cellOverlay,
+    int i_surroundRadius)
 {
   initialized = false;
   first = true;
@@ -112,6 +113,7 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
   stepSize = i_stepSize;
   cellSize = i_cellSize;
   cellOverlay = i_cellOverlay;
+  surroundRadius = i_surroundRadius;
   cx = i_cx;
   cy = i_cy;
   fx = i_fx;
@@ -209,6 +211,7 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
 
 std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     cv::Mat imCurr_t,
+    cv::Mat imView_t,
     bool gui,
     bool debug)
 {
@@ -230,6 +233,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   int blockszY = viableSD;
 
   imCurr = imCurr_t.clone();
+  imView = imView_t.clone();
 
   imPrev_g.upload(imPrev);
   imCurr_g.upload(imCurr);
@@ -241,7 +245,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   
   int d = cellSize-cellOverlay;
   std::size_t gridC[3] = {imCurr.cols/d,imCurr.rows/d,1};
-  std::size_t blockC[3] = {max_wg_size,max_wg_size,1};
+  std::size_t blockC[3] = {max_wg_size,1,1};
   std::size_t globalC[3] = {gridC[0]*blockC[0],gridC[1]*blockC[1],1};
 
   if (first){
@@ -311,6 +315,9 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   cv::ocl::oclMat foundPtsY_ord_g = cv::ocl::oclMat(cv::Size(gridA[1]*gridA[0]*maxCornersPerBlock,1),CV_16UC1);
   cv::ocl::oclMat foundPtsX_ord_flow_g = cv::ocl::oclMat(cv::Size(gridA[1]*gridA[0]*maxCornersPerBlock,1),CV_16SC1);
   cv::ocl::oclMat foundPtsY_ord_flow_g = cv::ocl::oclMat(cv::Size(gridA[1]*gridA[0]*maxCornersPerBlock,1),CV_16SC1);
+  cv::ocl::oclMat outA_g = cv::ocl::oclMat(cv::Size(gridC[0],gridC[1]),CV_16SC1);
+  cv::ocl::oclMat outB_g = cv::ocl::oclMat(cv::Size(gridC[0],gridC[1]),CV_16SC1);
+  cv::ocl::oclMat outC_g = cv::ocl::oclMat(cv::Size(gridC[0],gridC[1]),CV_16SC1);
 
   clEnqueueWriteBuffer(
       *(cl_command_queue*)(cv::ocl::Context::getContext()->getOpenCLCommandQueuePtr()),
@@ -429,6 +436,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     int gridC_width_g = gridC[0];
     int gridC_height_g = gridC[1];
     int cellSize_g = cellSize;
+    int surroundRadius_g = surroundRadius;
     int cellOverlay_g = cellOverlay;
 
     args.clear();
@@ -472,6 +480,37 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
         1,
         0,
         NULL);
+
+    outA_g = cv::Scalar(0);
+    outB_g = cv::Scalar(0);
+    outC_g = cv::Scalar(0);
+    int outWidth_g = outA_g.step / outA_g.elemSize(); 
+
+    args.clear();
+    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &outA_g.data ));
+    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &outB_g.data ));
+    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &outC_g.data ));
+    args.push_back( std::make_pair( sizeof(cl_int), (void *) &outWidth_g));
+    args.push_back( std::make_pair( sizeof(cl_int), (void *) &cellSize_g));
+    args.push_back( std::make_pair( sizeof(cl_int), (void *) &cellOverlay_g));
+    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &cellFlowX_g));
+    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &cellFlowY_g));
+    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &cellFlowNum_g));
+    args.push_back( std::make_pair( sizeof(cl_int), (void *) &gridC_width_g));
+    args.push_back( std::make_pair( sizeof(cl_int), (void *) &invalidFlowVal_g));
+    args.push_back( std::make_pair( sizeof(cl_int), (void *) &surroundRadius_g));
+
+    
+    cv::ocl::openCLExecuteKernelInterop(cv::ocl::Context::getContext(),
+        *program,
+        "BordersSurround",
+        globalC,
+        blockC,
+        args,
+        1,
+        0,
+        NULL);
+    
   }     
   cv::Mat imshowcorn;
   imShowcorn_g.download(imshowcorn);
@@ -480,6 +519,9 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   foundPtsY_ord_flow_g.download(foundPtsY_ord_flow);
   foundPtsX_ord_g.download(foundPtsX_ord);
   foundPtsY_ord_g.download(foundPtsY_ord);
+  outA_g.download(activationmap);
+  outB_g.download(averageX);
+  outC_g.download(averageY);
 
   clEnqueueCopyBuffer(
       *(cl_command_queue*)(cv::ocl::Context::getContext()->getOpenCLCommandQueuePtr()),
@@ -507,7 +549,15 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     if (false)
       cv::imshow("corners",imshowcorn);
     else
-      showFlow(foundPtsX_ord,foundPtsY_ord,foundPtsX_ord_flow,foundPtsY_ord_flow,false);
+      showFlow(
+          foundPtsX_ord,
+          foundPtsY_ord,
+          foundPtsX_ord_flow,
+          foundPtsY_ord_flow,
+          false,
+          activationmap,
+          averageX,
+          averageY);
   }
 
   imPrev = imCurr.clone();
@@ -517,11 +567,20 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
 
 }
 
-void SparseOptFlowOcl::showFlow(const cv::Mat posx, const cv::Mat posy, const cv::Mat flowx, const cv::Mat flowy, bool blankBG )
+void SparseOptFlowOcl::showFlow(
+    const cv::Mat posx,
+    const cv::Mat posy,
+    const cv::Mat flowx,
+    const cv::Mat flowy,
+    bool blankBG,
+    const cv::Mat actMap,
+    const cv::Mat avgX,
+    const cv::Mat avgY)
 {
   cv::Mat out;
 
   drawOpticalFlow(posx, posy, flowx, flowy, blankBG, out );
+  drawActivation(actMap,avgX,avgY);
 
   cv::imshow("Main", imView);
   if (storeVideo)
@@ -537,11 +596,9 @@ void SparseOptFlowOcl::drawOpticalFlow(
     cv::Mat& dst)
 {
   if (blankBG){
-    imView = cv::Mat(imCurr.size(),CV_8UC1); 
+    imView = cv::Mat(imCurr.size(),CV_8UC3); 
     imView = cv::Scalar(30);
   }
-  else
-    imView = imCurr.clone();
 
   int blockX = imView.cols/viableSD;
   int blockY = imView.rows/viableSD;
@@ -551,7 +608,7 @@ void SparseOptFlowOcl::drawOpticalFlow(
           imView,
           cv::Point2i(i*viableSD,0),
           cv::Point2i(i*viableSD,imView.rows-1),
-          cv::Scalar(150));
+          cv::Scalar(150,150,150));
 
     }
     for (int i = 0; i < blockY; i++) {
@@ -559,7 +616,7 @@ void SparseOptFlowOcl::drawOpticalFlow(
           imView,
           cv::Point2i(0,i*viableSD),
           cv::Point2i(imView.cols-1,i*viableSD),
-          cv::Scalar(150));
+          cv::Scalar(150,150,150));
     }
 
   }
@@ -568,11 +625,11 @@ void SparseOptFlowOcl::drawOpticalFlow(
   {
     if (flowx.at<short>(0, i) == invalidFlow)
     {
-      imView.at<char>(posy.at<ushort>(0,i),posx.at<ushort>(0,i)) = 0;
+      imView.at<cv::Vec3b>(posy.at<ushort>(0,i),posx.at<ushort>(0,i)) = cv::Vec3b(0,0,0);
     }
     else if (flowx.at<short>(0,i) == 8000)
     {
-      cv::circle(imView,cv::Point2i(posx.at<ushort>(0,i),posy.at<ushort>(0,i)),2,cv::Scalar(0),CV_FILLED);
+      cv::circle(imView,cv::Point2i(posx.at<ushort>(0,i),posy.at<ushort>(0,i)),2,cv::Scalar(0,0,0),CV_FILLED);
       //  imView.at<char>(posy.at<ushort>(0,i),posx.at<ushort>(0,i)) = 0;
     }
     else
@@ -582,10 +639,38 @@ void SparseOptFlowOcl::drawOpticalFlow(
       cv::line(imView,
           startPos,
           u,
-          cv::Scalar(255));
-      cv::circle(imView,cv::Point2i(posx.at<ushort>(0,i),posy.at<ushort>(0,i)),3,cv::Scalar(0));
+          cv::Scalar(255,255,255));
+      cv::circle(imView,cv::Point2i(posx.at<ushort>(0,i),posy.at<ushort>(0,i)),3,cv::Scalar(0,0,0));
     }
   }
   dst = imView;
 }
 
+void SparseOptFlowOcl::drawActivation(
+    const cv::Mat_<short>& actMap,
+    const cv::Mat_<short>& avgX,
+    const cv::Mat_<short>& avgY
+    ) {
+  int d = cellSize - cellOverlay;
+  int m = cellSize/2;
+  for (int j = 0; j < activationmap.rows; j++) {
+    for (int i = 0; i < activationmap.cols; i++) {
+      cv::circle(
+          imView,
+          cv::Point2i(i*d+m,j*d+m),
+          abs(activationmap.at<short>(j,i)),
+          cv::Scalar(0,0,255),
+          2);
+      int dx = avgX.at<short>(j,i)*2;
+      int dy = avgY.at<short>(j,i)*2;
+      cv::line(
+          imView,
+          cv::Point2i(i*d+m,j*d+m),
+          cv::Point2i(i*d+m+dx,j*d+m+dy),
+          cv::Scalar(255,0,0),
+          2);
+      
+    }
+    
+  }
+}

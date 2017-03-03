@@ -76,6 +76,7 @@ public:
 
         private_node_handle.param("cellSize", cellSize, int(32));
         private_node_handle.param("cellOverlay", cellOverlay, int(8));
+        private_node_handle.param("surroundRadius", surroundRadius, int(4));
 
         private_node_handle.param("DEBUG", DEBUG, bool(false));
 
@@ -162,7 +163,8 @@ public:
                   p2,
                   false,
                   cellSize,
-                  cellOverlay);
+                  cellOverlay,
+                  surroundRadius);
 
 
         ProcessCycle();
@@ -191,7 +193,8 @@ private:
         cvtColor(imCurr, imCurr, CV_RGB2GRAY);
 
        bmm->processImage(
-           imCurr
+           imCurr,
+           imCurr_raw
            );
 
         key = cv::waitKey(10);
@@ -326,6 +329,7 @@ private:
     int stepSize;
     int cellSize;
     int cellOverlay;
+    int surroundRadius;
 
     double cx,cy,fx,fy,s;
     double k1,k2,p1,p2,k3;

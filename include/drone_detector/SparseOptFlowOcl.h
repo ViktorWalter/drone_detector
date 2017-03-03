@@ -49,6 +49,7 @@ private:
     int viableSD;
     int cellSize;
     int cellOverlay;
+    int surroundRadius;
     cl_int EfficientWGSize;
     int foundPtsSize;
     double cx,cy,fx,fy;
@@ -59,6 +60,9 @@ private:
     cv::VideoWriter outputVideo;
     
     cv::Mat imPrev, imCurr, imView;
+    cv::Mat activationmap;
+    cv::Mat averageX;
+    cv::Mat averageY;
 
 
 public:
@@ -69,11 +73,12 @@ public:
                                          int i_k1,int i_k2,int i_k3,int i_p1,int i_p2,
                                          bool i_storeVideo,
                                          int i_cellSize,
-                                         int i_cellOverlay
+                                         int i_cellOverlay,
+                                         int i_surroundRadius
                            );
 
     std::vector<cv::Point2f> processImage(
-        cv::Mat imCurr_t,bool gui=true,bool debug=true);
+        cv::Mat imCurr_t,cv::Mat imView_t,bool gui=true,bool debug=true);
 
     void setImPrev(cv::Mat imPrev_t)
     {
@@ -82,7 +87,16 @@ public:
 
 
 private:
-    void showFlow(const cv::Mat posx, const cv::Mat posy, const cv::Mat flowx, const cv::Mat flowy, bool blankBG );
+    void showFlow(
+        const cv::Mat posx,
+        const cv::Mat posy,
+        const cv::Mat flowx,
+        const cv::Mat flowy,
+        bool blankBG,
+        const cv::Mat actMap,
+        const cv::Mat avgX,
+        const cv::Mat avgY
+        );
     void drawOpticalFlow(
         const cv::Mat_<ushort>& posx,
         const cv::Mat_<ushort>& posy,
@@ -90,6 +104,11 @@ private:
         const cv::Mat_<short>& flowy,
         bool blankBG,
         cv::Mat& dst);
+    void drawActivation(
+        const cv::Mat_<short>& actMap,
+        const cv::Mat_<short>& avgX,
+        const cv::Mat_<short>& avgY
+        );
 
 
 

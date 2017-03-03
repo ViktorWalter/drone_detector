@@ -13,6 +13,7 @@
 					<arg name="VideoNumber" default="1"/>
 					<arg name="cellSize" default="32"/>
 					<arg name="cellOverlay" default="8"/>
+					<arg name="surroundRadius" default="4"/>
 
 				<group ns="$(arg uav_name)">
 
@@ -26,6 +27,7 @@
                         <param name="StepSize"	type="int" value="$(arg StepSize)"/>
                         <param name="cellSize"	type="int" value="$(arg cellSize)"/>
                         <param name="cellOverlay"	type="int" value="$(arg cellOverlay)"/>
+                        <param name="surroundRadius"	type="int" value="$(arg surroundRadius)"/>
                         <rosparam file="$(find optic_flow)/yaml/ost.yaml"/>
                         <rosparam file="$(find optic_flow)/yaml/cam_rot.yaml"/>
                         <param name="method"	type="int" value="$(arg method)"/>

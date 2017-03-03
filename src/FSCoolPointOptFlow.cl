@@ -10,6 +10,7 @@
 #define threadsPerCornerPoint 32
 #define distanceWeight (samplePointSize2*0.05)
 #define excludedPoint -1
+#define minPointsThreshold 4
 
 __kernel void CornerPoints_C1_D0(
     __global unsigned char* input_1,
@@ -383,6 +384,11 @@ __kernel void OptFlowReduced_C1_D0(
       int Iy = posY / d;
       bool edgeX = ((posX%d)<outputFlowFieldOverlay);
       bool edgeY = ((posY%d)<outputFlowFieldOverlay);
+      if (Ix==0)
+        edgeX = false;
+      if (Iy==0)
+        edgeY = false;
+      
       if (edgeX && edgeY) {
         for (int i = -1; i < 0; i++) {
           for (int j = -1; j < 0; j++) {
@@ -425,15 +431,71 @@ __kernel void OptFlowReduced_C1_D0(
 __kernel void BordersSurround_C1_D0(
     __global short* outA,
     __global short* outB,
+    __global short* outC,
     int outWidth,
     int coreSize,
     int overlay,
-    __global int* flowX,
-    __global int* flowY,
-    int flowWidth,
-    int invalidFlowVal
+    __global int* inX,
+    __global int* inY,
+    __global int* inNum,
+    int inWidth,
+    int invalidFlowVal,
+    int surroundRadius
     )
 {
+  int blockX = get_group_id(0);
+  int blockY = get_group_id(1);
+  int blockNumX = get_num_groups(0);
+  int threadX = get_local_id(0);
+  int threadY = get_local_id(1);
+  int threadNumX = get_local_size(0);
+  int threadNumY = get_local_size(1);
+
+  int currIndexOutput = blockY*outWidth+blockX;
+  int currIndexCenter = blockY*inWidth+blockX;
+  int currIndexSurr;
+  //outB[currIndexOutput] = inNum[currIndexCenter];
+  //outB[currIndexOutput] = 5;//inNum[currIndexCenter];
+
+  if (inNum[currIndexCenter] < minPointsThreshold) {
+    outA[currIndexOutput] = 0;
+    return;
+  }
+
+  float avgOutX = 0;
+  float avgOutY = 0;
+  int cntOut = 0;
+  float avgInX = inX[currIndexCenter]/(float)inNum[currIndexCenter];
+  float avgInY = inY[currIndexCenter]/(float)inNum[currIndexCenter];
+
+  for (int i = -surroundRadius; i <= surroundRadius; i++) {
+    for (int j = -surroundRadius; j <= surroundRadius; j++) {
+      if ((i!=0)||(j!=0)){
+        currIndexSurr = (blockY+j)*inWidth+(blockX+i);
+        if (inNum[currIndexSurr] != 0){
+          avgOutX += inX[currIndexSurr]; 
+          avgOutY += inY[currIndexSurr]; 
+          cntOut += inNum[currIndexSurr];
+        }
+      }
+    }
+  }
+
+  if (cntOut == 0) {
+    avgOutX = 0;
+    avgOutY = 0;
+  }
+  else {
+    avgOutX = avgOutX/cntOut;
+    avgOutY = avgOutY/cntOut;
+  }
+
+
+  float dx = avgOutX - avgInX;
+  float dy = avgOutY - avgInY;
+  outA[currIndexOutput] = (short)sqrt(dx*dx+dy*dy);//*(cntOut/inNum[currIndexCenter]);
+  outB[currIndexCenter] = (short)avgInX;
+  outC[currIndexCenter] = (short)avgInY;
 //  int blockShiftX = -shiftRadius;
 //  int blockShiftY = -shiftRadius;
 //  int colNum = 0;

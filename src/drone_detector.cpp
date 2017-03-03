@@ -74,7 +74,8 @@ public:
 //        cv::imshow("main",testmat);
 //        cv::waitKey(10);
 
-        checkAccel = false;
+        private_node_handle.param("cellSize", cellSize, int(32));
+        private_node_handle.param("cellOverlay", cellOverlay, int(8));
 
         private_node_handle.param("DEBUG", DEBUG, bool(false));
 
@@ -138,15 +139,6 @@ public:
 
 
 
-        //image_transport::ImageTransport iTran(node);
-
-        VelocityPublisher = node.advertise<geometry_msgs::Twist>("velocity", 1);
-        VelocitySDPublisher = node.advertise<geometry_msgs::Vector3>("velocity_stddev", 1);
-        VelocityRawPublisher = node.advertise<geometry_msgs::Twist>("velocity_raw", 1);
-        MaxAllowedVelocityPublisher = node.advertise<std_msgs::Float32>("max_velocity", 1);
-
-        // Camera info subscriber
-
 
 
         if (ImgCompressed){
@@ -168,7 +160,9 @@ public:
                   k3,
                   p1,
                   p2,
-                  false);
+                  false,
+                  cellSize,
+                  cellOverlay);
 
 
         ProcessCycle();
@@ -330,6 +324,8 @@ private:
     int scanDiameter;
     int scanCount;
     int stepSize;
+    int cellSize;
+    int cellOverlay;
 
     double cx,cy,fx,fy,s;
     double k1,k2,p1,p2,k3;

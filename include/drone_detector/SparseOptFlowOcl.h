@@ -31,23 +31,30 @@ private:
 //    cv::ocl::oclMat foundPointsX_prev_g;
 //    cv::ocl::oclMat foundPointsY_prev_g;
 
-    cl_mem foundPointsX_g;
-    cl_mem foundPointsY_g;
-    cl_mem foundPointsX_prev_g;
-    cl_mem foundPointsY_prev_g;
+    cv::ocl::oclMat foundPointsX_g;
+    cv::ocl::oclMat foundPointsY_g;
+    cv::ocl::oclMat foundPointsX_prev_g;
+    cv::ocl::oclMat foundPointsY_prev_g;
+    cl_mem foundPtsSize_g;
     cl_mem numFoundBlock_g;
     cl_mem numFoundBlock_prev_g;
+    cl_mem cellFlowX_g;
+    cl_mem cellFlowY_g;
+    cl_mem cellFlowNum_g;
 
     int samplePointSize;
     int scanRadius;
     int stepSize;
     int scanBlock;
     int viableSD;
+    int cellSize;
+    int cellOverlay;
     cl_int EfficientWGSize;
     int foundPtsSize;
     double cx,cy,fx,fy;
     double k1,k2,k3,p1,p2;
     bool storeVideo;
+    cl_int *emptyCellGrid;
 
     cv::VideoWriter outputVideo;
     
@@ -60,7 +67,9 @@ public:
                                          int i_stepSize,
                                          int i_cx,int i_cy,int i_fx,int i_fy,
                                          int i_k1,int i_k2,int i_k3,int i_p1,int i_p2,
-                                         bool i_storeVideo
+                                         bool i_storeVideo,
+                                         int i_cellSize,
+                                         int i_cellOverlay
                            );
 
     std::vector<cv::Point2f> processImage(

@@ -1,4 +1,4 @@
-#define i1__at(x,y) input_1[(imgSrcOffset + x)+(y)*imgSrcWidth]
+#define i1__at(x,y) input_1[(imgSrcOffset + x)+(y)*imgSrcStep]
 #define arraySize 50
 #define MinValThreshold (samplePointSize2*20)//*1*prevFoundNum[currLine])
 #define MaxAbsDiffThreshold (samplePointSize2*10)
@@ -12,22 +12,25 @@
 #define excludedPoint -1
 #define minPointsThreshold 4
 
-__kernel void CornerPoints_C1_D0(
+__kernel void CornerPoints(
     __global unsigned char* input_1,
-    int imgSrcWidth,
+    int imgSrcStep,
     int imgSrcOffset,
-    int imgSrcTrueWidth,
+    int imgSrcWidth,
+    int imgSrcHeight,
     __global signed char* output_view,
-    int showCornWidth,
+    int showCornStep,
     int showCornOffset,
     __global ushort* foundPointsX,
     __global ushort* foundPointsY,
+    int foundPointsStep,
+    int foundPointsOffset,
     int foundPointsWidth,
+    int foundPointsHeight,
     __global int* numFoundBlock,
     __global ushort* foundPtsX_ord,
     __global ushort* foundPtsY_ord,
-    __global int* foundPtsSize,
-    int maxCornersPerBlock
+    __global int* foundPtsSize
     )
 {
   int blockX = get_group_id(0);
@@ -54,7 +57,7 @@ __kernel void CornerPoints_C1_D0(
       int x = blockX*blockSize+i;
       int y = blockY*blockSize+i;
       //if ((i>=3)&&(i<=maxij)&&(j>=3)&&(j<=maxij))
-      if ((x>=3)&&(x<=imgSrcTrueWidth-3)&&(y>=3)&&(y<=imgSrcTrueWidth-3))
+      if ((x>=3)&&(x<=imgSrcStep-3)&&(y>=3)&&(y<=imgSrcStep-3))
       {
         uchar I[17];
         I[0] = i1__at(blockX*(blockSize)+i,blockY*(blockSize)+j);
@@ -123,14 +126,15 @@ __kernel void CornerPoints_C1_D0(
             indexGlobal = atomic_inc(&(foundPtsSize[0]));
             if (indexLocal <= maxCornersPerBlock)
             {
-              output_view[(blockY*(blockSize)+j)*showCornWidth + (showCornOffset+blockX*(blockSize)+i) ] = 30;
+//              output_view[(blockY*(blockSize)+j)*showCornStep + (showCornOffset+blockX*(blockSize)+i) ] = 30;
               foundPointsX[
-                (blockY*blockNumX+blockX)*foundPointsWidth + indexLocal]=
+                (blockY*blockNumX+blockX)*foundPointsStep + indexLocal]=
                   blockX*(blockSize)+i;
               foundPointsY[
-                (blockY*blockNumX+blockX)*foundPointsWidth + indexLocal]=
+                (blockY*blockNumX+blockX)*foundPointsStep + indexLocal]=
                   blockY*(blockSize)+j;
             }
+              output_view[(blockY*(blockSize)+j)*showCornStep + (showCornOffset+blockX*(blockSize)+i) ] = 30;
             foundPtsX_ord[indexGlobal] =
               blockX*(blockSize)+i;
             foundPtsY_ord[indexGlobal] =
@@ -149,7 +153,7 @@ __kernel void CornerPoints_C1_D0(
 }
 
 
-__kernel void OptFlowReduced_C1_D0(
+__kernel void OptFlowReduced(
     __global unsigned char* input_1,
     __global unsigned char* input_2,
     int imgSrcWidth,
@@ -162,7 +166,6 @@ __kernel void OptFlowReduced_C1_D0(
     __global short* prevFoundBlockY,
     int prevFoundBlockWidth,
     __constant int* prevFoundNum,
-    int maxCornersPerBlock,
     __global signed char* output_view,
     int showCornWidth,
     int showCornOffset,
@@ -428,7 +431,7 @@ __kernel void OptFlowReduced_C1_D0(
 }
 
 
-__kernel void BordersSurround_C1_D0(
+__kernel void BordersSurround(
     __global short* outA,
     __global short* outB,
     __global short* outC,

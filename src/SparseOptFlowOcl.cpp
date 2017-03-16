@@ -2,98 +2,33 @@
 #include <ostream>
 #include <dirent.h>
 #include "ros/package.h"
+#include <X11/Xlib.h>
 
 #define maxCornersPerBlock 96
 #define invalidFlow -5555
 
-size_t roundUp(size_t sz, size_t n)
-{
-  size_t t = sz + n - 1;
-  size_t rem = t % n;
-  size_t result = t - rem;
-  return result;
-}
+cv::Mat ResizeToFitRectangle(cv::Mat& src, cv::Size size) {
+  if ((src.cols <= size.width) && (src.rows <= size.height))
+    return src;
+  cv::Size newsize;
+  float srcaspect, dstaspect;
+  srcaspect = src.cols/(float)src.rows;
+  dstaspect = size.width/(float)size.height;
+  ROS_INFO("src: %f, dst: %f",srcaspect,dstaspect);
 
-cl_kernel createKernel(
-    const char* source,
-    const char* kernelName)
-{
-  cl_kernel kernel;
-  cl_int ret;
-  cl_context context = *((cl_context*)(cv::ocl::Context::getContext()->getOpenCLContextPtr()));
-  cl_device_id device_id = *((cl_device_id*)(cv::ocl::Context::getContext()->getOpenCLDeviceIDPtr()));
-  const size_t lenSource = std::strlen(source);
-  cl_program program = clCreateProgramWithSource(
-      context,
-      1,
-      (const char**)&source,
-      NULL,
-      NULL);
-  CV_Assert(program != NULL);
-  ret = clBuildProgram(
-      program,
-      1,
-      (cl_device_id*)cv::ocl::Context::getContext()->getOpenCLDeviceIDPtr(),
-      NULL,
-      NULL,
-      NULL);
-  kernel = clCreateKernel(
-      program,
-      kernelName,
-      NULL);
-  clReleaseProgram(program);
-
-  return kernel;
-}
-
-void executeKernel(
-    cl_kernel kernel,
-    size_t globalThreads[3],
-    size_t localThreads[3],
-    std::vector< std::pair<size_t, const void *> > &args,
-     bool debug = false)
-{
-  cv::ocl::Context *context = cv::ocl::Context::getContext();
-  cl_command_queue queue = *(cl_command_queue*)context->getOpenCLCommandQueuePtr();
-  globalThreads[0] = roundUp(globalThreads[0], localThreads[0]);
-  globalThreads[1] = roundUp(globalThreads[1], localThreads[1]);
-  globalThreads[2] = roundUp(globalThreads[2], localThreads[2]);
-
-  for(size_t i = 0; i < args.size(); i ++)
-    clSetKernelArg(kernel, i, args[i].first, args[i].second);
-
-  if (!debug) {
-    clEnqueueNDRangeKernel(queue, kernel, 3, NULL, globalThreads,
-        localThreads, 0, NULL, NULL);
+  if (srcaspect > dstaspect) {
+    newsize.width = size.width;
+    newsize.height = size.width/srcaspect;
   }
   else {
-    cl_event event = NULL;
-    clEnqueueNDRangeKernel(queue, kernel, 3, NULL, globalThreads,
-        localThreads, 0, NULL, &event);
-
-    cl_ulong start_time, end_time, queue_time;
-    double execute_time = 0;
-    double total_time   = 0;
-
-    clWaitForEvents(1, &event);
-    clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START,
-        sizeof(cl_ulong), &start_time, 0);
-
-    clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END,
-        sizeof(cl_ulong), &end_time, 0);
-
-    clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_QUEUED,
-        sizeof(cl_ulong), &queue_time, 0);
-
-    execute_time = (double)(end_time - start_time) / (1000 * 1000);
-    total_time = (double)(end_time - queue_time) / (1000 * 1000);
-
-    ROS_INFO("Kernel execution time: %f",execute_time);
-    ROS_INFO("Kernel total time: %f",total_time);
-    clReleaseEvent(event);
+    newsize.height = size.height;
+    newsize.width = size.height*srcaspect;
   }
+  
+  cv::Mat dst;
+  cv::resize(src,dst,newsize);
+  return dst;
 
-  clFlush(queue);
 }
 
 SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
@@ -123,6 +58,11 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
   k3 = i_k3;
   p1 = i_p1;
   p2 = i_p2;
+  
+  Display* disp = XOpenDisplay(NULL);
+  Screen* scrn = DefaultScreenOfDisplay(disp);
+  monitorSize.height = scrn->height;
+  monitorSize.width = scrn->width;
 
 
   storeVideo = i_storeVideo;
@@ -133,45 +73,56 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
       ROS_INFO("Could not open output video file");
   }
 
+  cv::ocl::setUseOpenCL(true);
 
-  cv::ocl::DevicesInfo devsInfo;
-  if (cv::ocl::getOpenCLDevices(devsInfo,cv::ocl::CVCL_DEVICE_TYPE_ALL))
+  cv::ocl::Context* mainContext = new cv::ocl::Context();
+  mainContext->create(cv::ocl::Device::TYPE_DGPU);
+  cv::ocl::Device(mainContext->device(0));
+
+  if (mainContext->ndevices() == 0)
   {
-    for (int i=0; i<devsInfo.size(); i++)
-    {
-      std::cout << "Device " << i+1 << ": " << devsInfo[i]->deviceName << std::endl;
-    }
-  }
-  else
-  {
-    std::cout << "No devices found." << std::endl;
+    ROS_INFO("No devices found.");
     return;
   }
-  cv::ocl::setDevice(devsInfo[0]);
-  cl_device_id devID = *(cl_device_id*)(cv::ocl::Context::getContext()->getOpenCLDeviceIDPtr());
-  max_wg_size = (cv::ocl::Context::getContext()->getDeviceInfo().maxWorkGroupSize);
+  else
+    ROS_INFO("%s",mainContext->device(0).name().c_str());
+
+  device = cv::ocl::Device::getDefault();
+  context = cv::ocl::Context::getDefault();
+  queue = cv::ocl::Queue::getDefault();
+
+  did = (cl_device_id)device.ptr();
+  ctx = (cl_context)context.ptr();
+  cqu = (cl_command_queue)queue.ptr();
+
+  max_wg_size = device.maxWorkGroupSize();
   char Vendor[50];
   cl_int ErrCode = clGetDeviceInfo(
-      devID,
+      did,
       CL_DEVICE_VENDOR,
       49,
       &Vendor,
       NULL);
+
   ROS_INFO("Device vendor is %s",Vendor);
-  if (strcmp(Vendor,"NVIDIA Corporation") == 0)
-    ErrCode = clGetDeviceInfo(
-        devID,
+  if (device.isNVidia())
+    cl_int ErrCode = clGetDeviceInfo(
+        did,
         CL_DEVICE_WARP_SIZE_NV,
         sizeof(cl_uint),
         &EfficientWGSize,
         NULL);
-  else
-    ErrCode = clGetDeviceInfo(
-        devID,
+  else if (device.isIntel())
+    cl_int ErrCode = clGetDeviceInfo(
+        did,
         CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
         sizeof(cl_uint),
         &EfficientWGSize,
         NULL);
+  else {
+    ROS_INFO("Only NVIDIA and Intel cards are supported");
+    return;
+  }
 
   ROS_INFO("Warp size is %d",EfficientWGSize);
   viableSD = floor(sqrt(max_wg_size));
@@ -198,10 +149,30 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
   kernelSource[program_size] = '\0';
   fread(kernelSource, sizeof(char), program_size, program_handle);
   fclose(program_handle);
-  program = new cv::ocl::ProgramSource("OptFlow",kernelSource);
+  program = new cv::ocl::ProgramSource(kernelSource);
 
-  //kernel_CornerPoints = createKernel(kernelSource,"CornerPoints");
-  //kernel_OptFlow = createKernel(kernelSource,"OptFlowReduced");
+  cv::String ErrMsg;
+  k_CornerPoints = cv::ocl::Kernel("CornerPoints", *program,
+      cv::format( "-D maxCornersPerBlock=%d",maxCornersPerBlock)
+      );
+    if (k_CornerPoints.empty()){
+      ROS_INFO("kernel CornerPoints failed to initialize!");
+      return;
+    }
+  k_OptFlow = cv::ocl::Kernel("OptFlowReduced", *program,
+      cv::format( "-D maxCornersPerBlock=%d",maxCornersPerBlock)
+      );
+    if (k_OptFlow.empty()){
+      ROS_INFO("kernel OptFlowReduced failed to initialize!");
+      return;
+    }
+  k_BordersSurround = cv::ocl::Kernel("BordersSurround", *program,
+      cv::format( "-D maxCornersPerBlock=%d",maxCornersPerBlock)
+      );
+    if (k_BordersSurround.empty()){
+      ROS_INFO("kernel BordersSurround failed to initialize!");
+      return;
+    }
 
   initialized = true;
   ROS_INFO("OCL context initialized.");
@@ -235,8 +206,8 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   imCurr = imCurr_t.clone();
   imView = imView_t.clone();
 
-  imPrev_g.upload(imPrev);
-  imCurr_g.upload(imCurr);
+  imPrev_g = imPrev.getUMat(cv::ACCESS_READ);
+  imCurr_g = imCurr.getUMat(cv::ACCESS_READ);
 
   std::size_t gridA[3] = {(imPrev.cols)/(blockszX),(imPrev.rows)/(blockszY),1};
   std::size_t blockA[3] = {viableSD,viableSD,1};
@@ -251,16 +222,17 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   if (first){
     ROS_INFO("%dx%d",gridA[0],gridA[1]);
 
-    foundPointsX_g      = cv::ocl::oclMat(cv::Size(maxCornersPerBlock,gridA[1]*gridA[0]),CV_16UC1);
-    foundPointsY_g      = cv::ocl::oclMat(cv::Size(maxCornersPerBlock,gridA[1]*gridA[0]),CV_16UC1);
-    foundPointsX_prev_g = cv::ocl::oclMat(cv::Size(maxCornersPerBlock,gridA[1]*gridA[0]),CV_16UC1);
-    foundPointsY_prev_g = cv::ocl::oclMat(cv::Size(maxCornersPerBlock,gridA[1]*gridA[0]),CV_16UC1);
+    foundPointsX_g      = cv::UMat(cv::Size(maxCornersPerBlock,gridA[1]*gridA[0]),CV_16UC1);
+    foundPointsY_g      = cv::UMat(cv::Size(maxCornersPerBlock,gridA[1]*gridA[0]),CV_16UC1);
+    foundPointsX_prev_g = cv::UMat(cv::Size(maxCornersPerBlock,gridA[1]*gridA[0]),CV_16UC1);
+    foundPointsY_prev_g = cv::UMat(cv::Size(maxCornersPerBlock,gridA[1]*gridA[0]),CV_16UC1);
     foundPointsX_prev_g = cv::Scalar(0);
     foundPointsY_prev_g = cv::Scalar(0);
 
+
     cellFlowX_g =
       clCreateBuffer(
-          *(cl_context*)(cv::ocl::Context::getContext()->getOpenCLContextPtr()),
+          ctx,
           CL_MEM_READ_WRITE,
           sizeof(cl_int)*gridC[0]*gridC[1],
           NULL,
@@ -268,14 +240,14 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
 
     cellFlowY_g = 
       clCreateBuffer(
-          *(cl_context*)(cv::ocl::Context::getContext()->getOpenCLContextPtr()),
+          ctx,
           CL_MEM_READ_WRITE,
           sizeof(cl_int)*gridC[0]*gridC[1],
           NULL,
           NULL);
     cellFlowNum_g = 
       clCreateBuffer(
-          *(cl_context*)(cv::ocl::Context::getContext()->getOpenCLContextPtr()),
+          ctx,
           CL_MEM_READ_WRITE,
           sizeof(cl_int)*gridC[0]*gridC[1],
           NULL,
@@ -288,7 +260,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     
     numFoundBlock_g =
       clCreateBuffer(
-          *(cl_context*)(cv::ocl::Context::getContext()->getOpenCLContextPtr()),
+          ctx,
           CL_MEM_READ_WRITE,
           sizeof(cl_int)*gridA[0]*gridA[1],
           NULL,
@@ -296,7 +268,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
 
     numFoundBlock_prev_g = 
       clCreateBuffer(
-          *(cl_context*)(cv::ocl::Context::getContext()->getOpenCLContextPtr()),
+          ctx,
           CL_MEM_READ_WRITE,
           sizeof(cl_int)*gridA[0]*gridA[1],
           NULL,
@@ -304,23 +276,23 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
 
     foundPtsSize_g =
       clCreateBuffer(
-          *(cl_context*)(cv::ocl::Context::getContext()->getOpenCLContextPtr()),
+          ctx,
           CL_MEM_READ_WRITE,
           sizeof(cl_int),
           NULL,
           NULL);
 
   }
-  cv::ocl::oclMat foundPtsX_ord_g = cv::ocl::oclMat(cv::Size(gridA[1]*gridA[0]*maxCornersPerBlock,1),CV_16UC1);
-  cv::ocl::oclMat foundPtsY_ord_g = cv::ocl::oclMat(cv::Size(gridA[1]*gridA[0]*maxCornersPerBlock,1),CV_16UC1);
-  cv::ocl::oclMat foundPtsX_ord_flow_g = cv::ocl::oclMat(cv::Size(gridA[1]*gridA[0]*maxCornersPerBlock,1),CV_16SC1);
-  cv::ocl::oclMat foundPtsY_ord_flow_g = cv::ocl::oclMat(cv::Size(gridA[1]*gridA[0]*maxCornersPerBlock,1),CV_16SC1);
-  cv::ocl::oclMat outA_g = cv::ocl::oclMat(cv::Size(gridC[0],gridC[1]),CV_16SC1);
-  cv::ocl::oclMat outB_g = cv::ocl::oclMat(cv::Size(gridC[0],gridC[1]),CV_16SC1);
-  cv::ocl::oclMat outC_g = cv::ocl::oclMat(cv::Size(gridC[0],gridC[1]),CV_16SC1);
+  cv::UMat foundPtsX_ord_g = cv::UMat(cv::Size(gridA[1]*gridA[0]*maxCornersPerBlock,1),CV_16UC1);
+  cv::UMat foundPtsY_ord_g = cv::UMat(cv::Size(gridA[1]*gridA[0]*maxCornersPerBlock,1),CV_16UC1);
+  cv::UMat foundPtsX_ord_flow_g = cv::UMat(cv::Size(gridA[1]*gridA[0]*maxCornersPerBlock,1),CV_16SC1);
+  cv::UMat foundPtsY_ord_flow_g = cv::UMat(cv::Size(gridA[1]*gridA[0]*maxCornersPerBlock,1),CV_16SC1);
+  cv::UMat outA_g = cv::UMat(cv::Size(gridC[0],gridC[1]),CV_16SC1);
+  cv::UMat outB_g = cv::UMat(cv::Size(gridC[0],gridC[1]),CV_16SC1);
+  cv::UMat outC_g = cv::UMat(cv::Size(gridC[0],gridC[1]),CV_16SC1);
 
   clEnqueueWriteBuffer(
-      *(cl_command_queue*)(cv::ocl::Context::getContext()->getOpenCLCommandQueuePtr()),
+      cqu,
       cellFlowX_g,
       CL_TRUE,
       0,
@@ -330,7 +302,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
       NULL,
       NULL);
   clEnqueueWriteBuffer(
-      *(cl_command_queue*)(cv::ocl::Context::getContext()->getOpenCLCommandQueuePtr()),
+      cqu,
       cellFlowY_g,
       CL_TRUE,
       0,
@@ -340,7 +312,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
       NULL,
       NULL);
   clEnqueueWriteBuffer(
-      *(cl_command_queue*)(cv::ocl::Context::getContext()->getOpenCLCommandQueuePtr()),
+      cqu,
       cellFlowNum_g,
       CL_TRUE,
       0,
@@ -352,7 +324,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   
   foundPtsSize = 0;
   clEnqueueWriteBuffer(
-      *(cl_command_queue*)(cv::ocl::Context::getContext()->getOpenCLCommandQueuePtr()),
+      cqu,
       foundPtsSize_g,
       CL_TRUE,
       0,
@@ -362,7 +334,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
       NULL,
       NULL);
 
-  cv::ocl::oclMat imShowcorn_g = cv::ocl::oclMat(imCurr_g.size(),CV_8UC1);
+  cv::UMat imShowcorn_g = cv::UMat(imCurr_g.size(),CV_8UC1);
   imShowcorn_g = cv::Scalar(0);
   //foundPointsX_g = cv::Scalar(0);
   //foundPointsY_g = cv::Scalar(0);
@@ -380,13 +352,36 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   int invalidFlowVal_g = invalidFlow;
   int foundPointsBlockWidth_g = foundPointsX_g.step /foundPointsX_g.elemSize();
 
-  //    ROS_INFO("\nsrcwidth:%d\nsrcoffset:%d\ndstwidth:%d\ndstoffset:%d\nsps:%d\nss:%d\nsr:%d\nsd:%d\n",imSrcWidth_g,imSrcOffset_g,imDstWidth_g,imDstOffset_g,samplePointSize,stepSize,scanRadius,scanDiameter);
+  k_CornerPoints.args(
+      cv::ocl::KernelArg::ReadOnly(imCurr_g),
+      cv::ocl::KernelArg::WriteOnlyNoSize(imShowcorn_g),
+      cv::ocl::KernelArg::PtrWriteOnly(foundPointsX_g),
+      cv::ocl::KernelArg::WriteOnly(foundPointsY_g),
+      numFoundBlock_g,
+      cv::ocl::KernelArg::PtrWriteOnly(foundPtsX_ord_g),
+      cv::ocl::KernelArg::PtrWriteOnly(foundPtsY_ord_g),
+      foundPtsSize_g);
 
-  std::vector<std::pair<size_t , const void *> > args;
-  args.clear();
-  args.push_back( std::make_pair( sizeof(cl_mem), (void *) &imCurr_g.data ));
-  args.push_back( std::make_pair( sizeof(cl_int), (void *) &imSrcWidth_g));
-  args.push_back( std::make_pair( sizeof(cl_int), (void *) &imSrcOffset_g));
+  if (k_CornerPoints.run(2,gridA,blockA,true)){
+    ROS_INFO("pass");
+  }
+  else
+    ROS_INFO("fail");
+
+  clEnqueueReadBuffer(
+      cqu,
+      foundPtsSize_g,
+      CL_TRUE,
+      0,
+      sizeof(cl_int),
+      &foundPtsSize,
+      0,
+      NULL,
+      NULL);
+
+  ROS_INFO("Number of points for next phase is %d",foundPtsSize);
+
+/*
   args.push_back( std::make_pair( sizeof(cl_int), (void *) &imSrcTrueWidth_g));
   args.push_back( std::make_pair( sizeof(cl_mem), (void *) &imShowcorn_g.data ));
   args.push_back( std::make_pair( sizeof(cl_int), (void *) &imShowCornWidth_g));
@@ -399,9 +394,9 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPtsY_ord_g.data));
   args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPtsSize_g));
   args.push_back( std::make_pair( sizeof(cl_int), (void *) &maxCornersPerBlock_g));
-
-  
-  cv::ocl::openCLExecuteKernelInterop(cv::ocl::Context::getContext(),
+*/
+ /* 
+  cv::ocl::openCLExecuteKernelInterop(context,
       *program,
       "CornerPoints",
       globalA,
@@ -512,16 +507,14 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
         NULL);
     
   }     
-  cv::Mat imshowcorn;
-  imShowcorn_g.download(imshowcorn);
   cv::Mat foundPtsX_ord_flow, foundPtsY_ord_flow, foundPtsX_ord, foundPtsY_ord;
-  foundPtsX_ord_flow_g.download(foundPtsX_ord_flow);
-  foundPtsY_ord_flow_g.download(foundPtsY_ord_flow);
-  foundPtsX_ord_g.download(foundPtsX_ord);
-  foundPtsY_ord_g.download(foundPtsY_ord);
-  outA_g.download(activationmap);
-  outB_g.download(averageX);
-  outC_g.download(averageY);
+  foundPtsX_ord_flow = foundPtsX_ord_flow_g.getMat();
+  foundPtsY_ord_flow = foundPtsY_ord_flow_g.getMat();
+  foundPtsX_ord = foundPtsX_ord_g.getMat();
+  foundPtsY_ord = foundPtsY_ord_g.getMat();
+  activationmap = outA_g.getMat();
+  averageX = outB_g.getMat();
+  averageY = outC_g.getMat();
 
   clEnqueueCopyBuffer(
       *(cl_command_queue*)(cv::ocl::Context::getContext()->getOpenCLCommandQueuePtr()),
@@ -539,25 +532,28 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
 
   clFinish(*(cl_command_queue*)(cv::ocl::Context::getContext()->getOpenCLCommandQueuePtr()));
 
+  */
 
+  cv::Mat imshowcorn;
+  imshowcorn = imShowcorn_g.getMat(cv::ACCESS_READ);
   if (debug)
   {
     // ROS_INFO("out: %dx%d",outX_l.cols,outX_l.rows);
   }
   if (gui)
   {
-    if (false)
-      cv::imshow("corners",imshowcorn);
-    else
-      showFlow(
-          foundPtsX_ord,
-          foundPtsY_ord,
-          foundPtsX_ord_flow,
-          foundPtsY_ord_flow,
-          false,
-          activationmap,
-          averageX,
-          averageY);
+    if (true)
+      cv::imshow("corners",imShowcorn_g);
+  //  else
+  //    showFlow(
+  //        foundPtsX_ord,
+  //        foundPtsY_ord,
+  //        foundPtsX_ord_flow,
+  //        foundPtsY_ord_flow,
+  //        false,
+  //        activationmap,
+  //        averageX,
+  //        averageY);
   }
 
   imPrev = imCurr.clone();
@@ -582,6 +578,7 @@ void SparseOptFlowOcl::showFlow(
   drawOpticalFlow(posx, posy, flowx, flowy, blankBG, out );
   drawActivation(actMap,avgX,avgY);
 
+  imView = ResizeToFitRectangle(imView,monitorSize);
   cv::imshow("Main", imView);
   if (storeVideo)
     outputVideo << out;
@@ -674,3 +671,4 @@ void SparseOptFlowOcl::drawActivation(
     
   }
 }
+

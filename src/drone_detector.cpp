@@ -177,6 +177,7 @@ private:
 
     void ProcessCycle()
     {
+      cv::namedWindow("Main", CV_GUI_NORMAL|CV_WINDOW_AUTOSIZE); 
       cv::RNG rng(12345);
       
       cv::Mat mask = cv::imread(MaskPath.str().c_str());

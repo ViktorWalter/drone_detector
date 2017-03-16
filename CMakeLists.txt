@@ -28,7 +28,16 @@ if(NOT EIGEN3_FOUND)
 endif()
 
 find_package(OpenCV REQUIRED)
-find_package(OpenCL REQUIRED)
+if (EXISTS /usr/local/cuda/include/CL/cl.hpp)
+  set(OpenCL_INCLUDE_DIRS /usr/local/cuda/include)
+  if (EXISTS /usr/local/cuda/lib64/libOpenCL.so)
+    set(OpenCL_LIBRARIES /usr/local/cuda/lib64/libOpenCL.so)
+  else()
+    set(OpenCL_LIBRARIES /usr/local/cuda/lib/libOpenCL.so)
+  endif()
+else()
+  find_package(OpenCL REQUIRED HINTS /usr/local/cuda)
+endif()
 message("${OpenCL_INCLUDE_DIRS} ${OpenCL_LIBRARIES}")
 ################################################
 ## Declare ROS messages, services and actions ##

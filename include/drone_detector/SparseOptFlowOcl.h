@@ -5,8 +5,8 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <image_transport/image_transport.h>
 #include <opencv2/core/core.hpp>
+#include <opencv2/core/ocl.hpp>
 #include <CL/cl.hpp>
-#include <opencv2/ocl/ocl.hpp>
 
 
 class SparseOptFlowOcl
@@ -20,21 +20,28 @@ private:
     cl_program prog_OptFlow;
     cl_kernel kernel_CornerPoints;
     cl_kernel kernel_OptFlow;
+    cv::ocl::Kernel k_OptFlow, k_CornerPoints, k_BordersSurround;
+    cv::ocl::Device device;
+    cv::ocl::Context context;
+    cv::ocl::Queue queue;
+    cl_device_id did;
+    cl_context ctx;
+    cl_command_queue cqu;
   
     int max_wg_size;
 
-    cv::ocl::oclMat imCurr_g;
-    cv::ocl::oclMat imPrev_g;
+    cv::UMat imCurr_g;
+    cv::UMat imPrev_g;
 
-//    cv::ocl::oclMat foundPointsX_g;
-//    cv::ocl::oclMat foundPointsY_g;
-//    cv::ocl::oclMat foundPointsX_prev_g;
-//    cv::ocl::oclMat foundPointsY_prev_g;
+//    cv::UMat foundPointsX_g;
+//    cv::UMat foundPointsY_g;
+//    cv::UMat foundPointsX_prev_g;
+//    cv::UMat foundPointsY_prev_g;
 
-    cv::ocl::oclMat foundPointsX_g;
-    cv::ocl::oclMat foundPointsY_g;
-    cv::ocl::oclMat foundPointsX_prev_g;
-    cv::ocl::oclMat foundPointsY_prev_g;
+    cv::UMat foundPointsX_g;
+    cv::UMat foundPointsY_g;
+    cv::UMat foundPointsX_prev_g;
+    cv::UMat foundPointsY_prev_g;
     cl_mem foundPtsSize_g;
     cl_mem numFoundBlock_g;
     cl_mem numFoundBlock_prev_g;
@@ -58,12 +65,13 @@ private:
     cl_int *emptyCellGrid;
 
     cv::VideoWriter outputVideo;
-    
+   
     cv::Mat imPrev, imCurr, imView;
     cv::Mat activationmap;
     cv::Mat averageX;
     cv::Mat averageY;
 
+    cv::Size monitorSize;
 
 public:
     SparseOptFlowOcl(int i_samplePointSize,

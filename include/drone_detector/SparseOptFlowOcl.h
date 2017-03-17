@@ -12,7 +12,6 @@
 class SparseOptFlowOcl
 {
 private:
-    bool initialized;
     bool first;
     char* kernelSource;
     cv::ocl::ProgramSource* program;
@@ -21,6 +20,7 @@ private:
     cl_kernel kernel_CornerPoints;
     cl_kernel kernel_OptFlow;
     cv::ocl::Kernel k_OptFlow, k_CornerPoints, k_BordersSurround;
+    cv::ocl::Kernel k_Tester;
     cv::ocl::Device device;
     cv::ocl::Context context;
     cv::ocl::Queue queue;
@@ -92,6 +92,8 @@ public:
     {
       imPrev = imPrev_t;
     }
+
+    bool initialized;
 
 
 private:

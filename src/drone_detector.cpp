@@ -166,8 +166,8 @@ public:
                   cellOverlay,
                   surroundRadius);
 
-
-        ProcessCycle();
+        if (bmm->initialized)
+          ProcessCycle();
     }
     ~DroneDetector(){
 

@@ -13,23 +13,23 @@
 #define minPointsThreshold 4
 
 __kernel void CornerPoints(
-    __global unsigned char* input_1,
+    __global uchar* input_1,
     int imgSrcStep,
     int imgSrcOffset,
-    int imgSrcWidth,
     int imgSrcHeight,
-    __global signed char* output_view,
+    int imgSrcWidth,
+    __global uchar* output_view,
     int showCornStep,
     int showCornOffset,
     __global ushort* foundPointsX,
     __global ushort* foundPointsY,
     int foundPointsStep,
     int foundPointsOffset,
-    int foundPointsWidth,
     int foundPointsHeight,
-    __global int* numFoundBlock,
+    int foundPointsWidth,
     __global ushort* foundPtsX_ord,
     __global ushort* foundPtsY_ord,
+    __global int* numFoundBlock,
     __global int* foundPtsSize
     )
 {
@@ -64,16 +64,26 @@ __kernel void CornerPoints(
         I[1] = i1__at(blockX*(blockSize)+i,blockY*(blockSize)+(j-3));
         I[9] = i1__at(blockX*(blockSize)+i,blockY*(blockSize)+(j+3));
 
-        if (((I[1]>(I[0]-FastThresh)) && (I[1]<(I[0]+FastThresh))) && (I[9]>(I[0]-FastThresh)) && (I[9]<(I[0]+FastThresh)))
+        if (((I[1]>(I[0]-FastThresh)) && (I[1]<(I[0]+FastThresh)))
+            &&
+            ((I[9]>(I[0]-FastThresh)) && (I[9]<(I[0]+FastThresh))))
           return;
         I[5] = i1__at(blockX*(blockSize)+(i+3),blockY*(blockSize)+j);
         I[13] = i1__at(blockX*(blockSize)+(i-3),blockY*(blockSize)+j);
-        char l= (I[1]>(I[0]+FastThresh))+(I[9]>(I[0]+FastThresh))+(I[5]>(I[0]+FastThresh))+(I[13]>(I[0]+FastThresh));
-        char h= (I[1]<(I[0]-FastThresh))+(I[9]<(I[0]-FastThresh))+(I[5]<(I[0]-FastThresh))+(I[13]<(I[0]+FastThresh));
+        char l=
+          (I[1]>(I[0]+FastThresh))+(I[9]>(I[0]+FastThresh))+
+          (I[5]>(I[0]+FastThresh))+(I[13]>(I[0]+FastThresh));
+        char h=
+          (I[1]<(I[0]-FastThresh))+(I[9]<(I[0]-FastThresh))+
+          (I[5]<(I[0]-FastThresh))+(I[13]<(I[0]-FastThresh));
+
+//          foundPtsSize[0] =blockNumY;
+//          return;
+
         if ( (l>3) || (h>3) )
         {
           char sg = 1;
-          if (l >3)
+          if (l >=3)
             sg = -1;
           I[2] = i1__at(blockX*(blockSize)+(i+1),blockY*(blockSize)+(j-3));
           I[3] = i1__at(blockX*(blockSize)+(i+2),blockY*(blockSize)+(j-2));
@@ -126,7 +136,10 @@ __kernel void CornerPoints(
             indexGlobal = atomic_inc(&(foundPtsSize[0]));
             if (indexLocal <= maxCornersPerBlock)
             {
-//              output_view[(blockY*(blockSize)+j)*showCornStep + (showCornOffset+blockX*(blockSize)+i) ] = 30;
+              output_view[
+              (blockY*(blockSize)+j)*showCornStep +
+                (showCornOffset+blockX*(blockSize)+i) ] =
+                30;
               foundPointsX[
                 (blockY*blockNumX+blockX)*foundPointsStep + indexLocal]=
                   blockX*(blockSize)+i;
@@ -134,7 +147,6 @@ __kernel void CornerPoints(
                 (blockY*blockNumX+blockX)*foundPointsStep + indexLocal]=
                   blockY*(blockSize)+j;
             }
-              output_view[(blockY*(blockSize)+j)*showCornStep + (showCornOffset+blockX*(blockSize)+i) ] = 30;
             foundPtsX_ord[indexGlobal] =
               blockX*(blockSize)+i;
             foundPtsY_ord[indexGlobal] =
@@ -156,21 +168,20 @@ __kernel void CornerPoints(
 __kernel void OptFlowReduced(
     __global unsigned char* input_1,
     __global unsigned char* input_2,
-    int imgSrcWidth,
+    int imgSrcStep,
     int imgSrcOffset,
-    int imgSrcTrueWidth,
-    int imgSrcTrueHeight,
+    int imgSrcHeight,
+    int imgSrcWidth,
     __global ushort* foundPtsX,
     __global ushort* foundPtsY,
     __global short* prevFoundBlockX,
     __global short* prevFoundBlockY,
-    int prevFoundBlockWidth,
+    int prevFoundBlockStep,
+    int prevFoundBlockOffset,
     __constant int* prevFoundNum,
     __global signed char* output_view,
     int showCornWidth,
     int showCornOffset,
-    int samplePointSize,
-    int prevBlockSize,
     int prevBlockWidth,
     int prevBlockHeight,
     __global ushort* outputPosOrdX,
@@ -178,11 +189,7 @@ __kernel void OptFlowReduced(
     __global int* outputFlowBlockX,
     __global int* outputFlowBlockY,
     __global int* outputFlowBlockNum,
-    int outputFlowBlockBlockWidth,
-    int outputFlowFieldSize,
-    int outputFlowFieldOverlay,
-    int invalidFlowVal
-
+    int outputFlowBlockWidth
     )
 {
   int block = get_group_id(0);
@@ -203,12 +210,12 @@ __kernel void OptFlowReduced(
 
   int samplePointSize2 = samplePointSize*samplePointSize;
 
-  int currBlockX = posX/prevBlockSize;
-  int currBlockY = posY/prevBlockSize;
+  int currBlockX = posX/firstStepBlockSize;
+  int currBlockY = posY/firstStepBlockSize;
   int currLine = (currBlockY)*prevBlockWidth + (currBlockX);
   int d = outputFlowFieldSize - outputFlowFieldOverlay;
 
-//  float maxdist2 = (prevBlockSize*prevBlockSize*maxDistMultiplier*maxDistMultiplier);
+//  float maxdist2 = (firstStepBlockSize*firstStepBlockSize*maxDistMultiplier*maxDistMultiplier);
 
   barrier(CLK_LOCAL_MEM_FENCE);
   //First gather up the previous corner points that are in the vicinity
@@ -252,8 +259,8 @@ __kernel void OptFlowReduced(
     if (prevFoundNum[lineNum] > 0) {
       int consideredX;
       int consideredY;
-      consideredX = prevFoundBlockX[lineNum*prevFoundBlockWidth+colNum];
-      consideredY = prevFoundBlockY[lineNum*prevFoundBlockWidth+colNum];
+      consideredX = prevFoundBlockX[lineNum*prevFoundBlockStep+colNum];
+      consideredY = prevFoundBlockY[lineNum*prevFoundBlockStep+colNum];
       if (pointsHeld > 0)
         if ((consideredX == Xpositions[pointsHeld-1]) && (consideredY == Ypositions[pointsHeld-1])){
           watchdog = true;
@@ -264,8 +271,8 @@ __kernel void OptFlowReduced(
       if (
           (consideredX >= (-corner))
           &&(consideredY >= (-corner))
-          &&(consideredX<(imgSrcTrueWidth+corner))
-          &&(consideredY<(imgSrcTrueHeight+corner))
+          &&(consideredX<(imgSrcWidth+corner))
+          &&(consideredY<(imgSrcHeight+corner))
          ){
       //  int dx = posX - consideredX;
       //  int dy = posY - consideredY;
@@ -274,7 +281,7 @@ __kernel void OptFlowReduced(
         {
           Xpositions[pointsHeld] = consideredX;
           Ypositions[pointsHeld] = consideredY;
-          Indices[pointsHeld] = lineNum*prevFoundBlockWidth+colNum;
+          Indices[pointsHeld] = lineNum*prevFoundBlockStep+colNum;
           pointsHeld++;
         }
       }
@@ -358,9 +365,9 @@ __kernel void OptFlowReduced(
     resX = Xpositions[minI];
     resY = Ypositions[minI];
 
-    //    if ((resX > imgSrcTrueWidth) || (resX < 0))
+    //    if ((resX > imgSrcWidth) || (resX < 0))
     //      return;
-    //    if ((resY > imgSrcTrueHeight) || (resY < 0))
+    //    if ((resY > imgSrcHeight) || (resY < 0))
     //      return;
     if ( (minI < (pointsHeld-1)) && ((abssum[pointsHeld-1] - minval) <= MaxAbsDiffThreshold))  //if the difference is small, then it is considered to be noise in a uniformly colored area
       {
@@ -395,30 +402,30 @@ __kernel void OptFlowReduced(
       if (edgeX && edgeY) {
         for (int i = -1; i < 0; i++) {
           for (int j = -1; j < 0; j++) {
-            atomic_add(&outputFlowBlockX[(Iy+j)*outputFlowBlockBlockWidth+(Ix+i)],(posX - resX));
-            atomic_add(&outputFlowBlockY[(Iy+j)*outputFlowBlockBlockWidth+(Ix+i)],(posY - resY));
-            atomic_inc(&outputFlowBlockNum[(Iy+j)*outputFlowBlockBlockWidth+(Ix+i)]);
+            atomic_add(&outputFlowBlockX[(Iy+j)*outputFlowBlockWidth+(Ix+i)],(posX - resX));
+            atomic_add(&outputFlowBlockY[(Iy+j)*outputFlowBlockWidth+(Ix+i)],(posY - resY));
+            atomic_inc(&outputFlowBlockNum[(Iy+j)*outputFlowBlockWidth+(Ix+i)]);
           }
         }
       }
       else if (edgeX) {
         for (int i = -1; i < 0; i++) {
-          atomic_add(&outputFlowBlockX[(Iy)*outputFlowBlockBlockWidth+(Ix+i)],(posX - resX));
-          atomic_add(&outputFlowBlockY[(Iy)*outputFlowBlockBlockWidth+(Ix+i)],(posY - resY));
-          atomic_inc(&outputFlowBlockNum[(Iy)*outputFlowBlockBlockWidth+(Ix+i)]);
+          atomic_add(&outputFlowBlockX[(Iy)*outputFlowBlockWidth+(Ix+i)],(posX - resX));
+          atomic_add(&outputFlowBlockY[(Iy)*outputFlowBlockWidth+(Ix+i)],(posY - resY));
+          atomic_inc(&outputFlowBlockNum[(Iy)*outputFlowBlockWidth+(Ix+i)]);
         }
       }
       else if (edgeY){
         for (int j = -1; j < 0; j++) {
-          atomic_add(&outputFlowBlockX[(Iy+j)*outputFlowBlockBlockWidth+(Ix)],(posX - resX));
-          atomic_add(&outputFlowBlockY[(Iy+j)*outputFlowBlockBlockWidth+(Ix)],(posY - resY));
-          atomic_inc(&outputFlowBlockNum[(Iy+j)*outputFlowBlockBlockWidth+(Ix)]);
+          atomic_add(&outputFlowBlockX[(Iy+j)*outputFlowBlockWidth+(Ix)],(posX - resX));
+          atomic_add(&outputFlowBlockY[(Iy+j)*outputFlowBlockWidth+(Ix)],(posY - resY));
+          atomic_inc(&outputFlowBlockNum[(Iy+j)*outputFlowBlockWidth+(Ix)]);
         }
       }
       else {
-        atomic_add(&outputFlowBlockX[(Iy)*outputFlowBlockBlockWidth+(Ix)],(posX - resX));
-        atomic_add(&outputFlowBlockY[(Iy)*outputFlowBlockBlockWidth+(Ix)],(posY - resY));
-        atomic_inc(&outputFlowBlockNum[(Iy)*outputFlowBlockBlockWidth+(Ix)]);
+        atomic_add(&outputFlowBlockX[(Iy)*outputFlowBlockWidth+(Ix)],(posX - resX));
+        atomic_add(&outputFlowBlockY[(Iy)*outputFlowBlockWidth+(Ix)],(posY - resY));
+        atomic_inc(&outputFlowBlockNum[(Iy)*outputFlowBlockWidth+(Ix)]);
       }
 
     }
@@ -435,15 +442,12 @@ __kernel void BordersSurround(
     __global short* outA,
     __global short* outB,
     __global short* outC,
-    int outWidth,
-    int coreSize,
-    int overlay,
+    int outStep,
+    int outOffset,
     __global int* inX,
     __global int* inY,
     __global int* inNum,
-    int inWidth,
-    int invalidFlowVal,
-    int surroundRadius
+    int inStep
     )
 {
   int blockX = get_group_id(0);
@@ -454,14 +458,14 @@ __kernel void BordersSurround(
   int threadNumX = get_local_size(0);
   int threadNumY = get_local_size(1);
 
-  int currIndexOutput = blockY*outWidth+blockX;
-  int currIndexCenter = blockY*inWidth+blockX;
+  int currIndexOutput = blockY*(outStep/sizeof(ushort))+blockX+outOffset/sizeof(ushort);
+  int currIndexCenter = blockY*inStep+blockX;
   int currIndexSurr;
-  //outB[currIndexOutput] = inNum[currIndexCenter];
-  //outB[currIndexOutput] = 5;//inNum[currIndexCenter];
 
   if (inNum[currIndexCenter] < minPointsThreshold) {
     outA[currIndexOutput] = 0;
+    outB[currIndexOutput] = 0;
+    outC[currIndexOutput] = 0;
     return;
   }
 
@@ -474,7 +478,7 @@ __kernel void BordersSurround(
   for (int i = -surroundRadius; i <= surroundRadius; i++) {
     for (int j = -surroundRadius; j <= surroundRadius; j++) {
       if ((i!=0)||(j!=0)){
-        currIndexSurr = (blockY+j)*inWidth+(blockX+i);
+        currIndexSurr = (blockY+j)*inStep+(blockX+i);
         if (inNum[currIndexSurr] != 0){
           avgOutX += inX[currIndexSurr]; 
           avgOutY += inY[currIndexSurr]; 
@@ -497,8 +501,8 @@ __kernel void BordersSurround(
   float dx = avgOutX - avgInX;
   float dy = avgOutY - avgInY;
   outA[currIndexOutput] = (short)sqrt(dx*dx+dy*dy);//*(cntOut/inNum[currIndexCenter]);
-  outB[currIndexCenter] = (short)avgInX;
-  outC[currIndexCenter] = (short)avgInY;
+  outB[currIndexOutput] = (short)avgInX;
+  outC[currIndexOutput] = (short)avgInY;
 //  int blockShiftX = -shiftRadius;
 //  int blockShiftY = -shiftRadius;
 //  int colNum = 0;
@@ -543,8 +547,8 @@ __kernel void BordersSurround(
 //      if (
 //          (consideredX >= (-corner))
 //          &&(consideredY >= (-corner))
-//          &&(consideredX<(imgSrcTrueWidth+corner))
-//          &&(consideredY<(imgSrcTrueHeight+corner))
+//          &&(consideredX<(imgSrcWidth+corner))
+//          &&(consideredY<(imgSrcHeight+corner))
 //          &&(consideredX != excludedPoint)
 //         ){
 //      //  int dx = posX - consideredX;
@@ -581,6 +585,11 @@ __kernel void BordersGlobal_C1_D0(
 __kernel void BordersHeading_C1_D0(
     )
 {
+}
+
+__kernel void Tester(__global uchar* input,int step,int offset)
+{
+  input[get_global_id(0)+offset+step*get_global_id(1)] = (get_global_id(0)+get_global_id(1))%256;
 }
 
 

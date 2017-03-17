@@ -153,23 +153,38 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
 
   cv::String ErrMsg;
   k_CornerPoints = cv::ocl::Kernel("CornerPoints", *program,
-      cv::format( "-D maxCornersPerBlock=%d",maxCornersPerBlock)
-      );
+      cv::format( "-D maxCornersPerBlock=%d -D invalidFlowVal=%d "
+        "-D samplePointSize=%d -D outputFlowFieldSize=%d -D outputFlowFieldOverlay=%d "
+        "-D firstStepBlockSize=%d -D surroundRadius=%d "
+        ,maxCornersPerBlock,invalidFlow,samplePointSize,cellSize,cellOverlay,viableSD,surroundRadius));
     if (k_CornerPoints.empty()){
       ROS_INFO("kernel CornerPoints failed to initialize!");
       return;
     }
   k_OptFlow = cv::ocl::Kernel("OptFlowReduced", *program,
-      cv::format( "-D maxCornersPerBlock=%d",maxCornersPerBlock)
-      );
+      cv::format( "-D maxCornersPerBlock=%d -D invalidFlowVal=%d "
+        "-D samplePointSize=%d -D outputFlowFieldSize=%d -D outputFlowFieldOverlay=%d "
+        "-D firstStepBlockSize=%d -D surroundRadius=%d "
+        ,maxCornersPerBlock,invalidFlow,samplePointSize,cellSize,cellOverlay,viableSD,surroundRadius));
     if (k_OptFlow.empty()){
       ROS_INFO("kernel OptFlowReduced failed to initialize!");
       return;
     }
   k_BordersSurround = cv::ocl::Kernel("BordersSurround", *program,
-      cv::format( "-D maxCornersPerBlock=%d",maxCornersPerBlock)
-      );
+      cv::format( "-D maxCornersPerBlock=%d -D invalidFlowVal=%d "
+        "-D samplePointSize=%d -D outputFlowFieldSize=%d -D outputFlowFieldOverlay=%d "
+        "-D firstStepBlockSize=%d -D surroundRadius=%d "
+        ,maxCornersPerBlock,invalidFlow,samplePointSize,cellSize,cellOverlay,viableSD,surroundRadius));
     if (k_BordersSurround.empty()){
+      ROS_INFO("kernel BordersSurround failed to initialize!");
+      return;
+    }
+  k_Tester = cv::ocl::Kernel("Tester", *program,
+      cv::format( "-D maxCornersPerBlock=%d -D invalidFlowVal=%d "
+        "-D samplePointSize=%d -D outputFlowFieldSize=%d -D outputFlowFieldOverlay=%d "
+        "-D firstStepBlockSize=%d -D surroundRadius=%d "
+        ,maxCornersPerBlock,invalidFlow,samplePointSize,cellSize,cellOverlay,viableSD,surroundRadius));
+    if (k_Tester.empty()){
       ROS_INFO("kernel BordersSurround failed to initialize!");
       return;
     }
@@ -216,7 +231,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   
   int d = cellSize-cellOverlay;
   std::size_t gridC[3] = {imCurr.cols/d,imCurr.rows/d,1};
-  std::size_t blockC[3] = {max_wg_size,1,1};
+  std::size_t blockC[3] = {1,1,1};
   std::size_t globalC[3] = {gridC[0]*blockC[0],gridC[1]*blockC[1],1};
 
   if (first){
@@ -228,6 +243,8 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     foundPointsY_prev_g = cv::UMat(cv::Size(maxCornersPerBlock,gridA[1]*gridA[0]),CV_16UC1);
     foundPointsX_prev_g = cv::Scalar(0);
     foundPointsY_prev_g = cv::Scalar(0);
+    foundPointsX_g = cv::Scalar(0);
+    foundPointsY_g = cv::Scalar(0);
 
 
     cellFlowX_g =
@@ -334,40 +351,33 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
       NULL,
       NULL);
 
-  cv::UMat imShowcorn_g = cv::UMat(imCurr_g.size(),CV_8UC1);
-  imShowcorn_g = cv::Scalar(0);
-  //foundPointsX_g = cv::Scalar(0);
-  //foundPointsY_g = cv::Scalar(0);
+  cv::UMat imShowCorn_g = cv::UMat(imCurr_g.size(),CV_8UC1);
+  imShowCorn_g = cv::Scalar(0);
   foundPtsX_ord_g = cv::Scalar(0);
   foundPtsY_ord_g = cv::Scalar(0);
   foundPtsX_ord_flow_g = cv::Scalar(invalidFlow);
   foundPtsY_ord_flow_g = cv::Scalar(invalidFlow);
-  int imShowCornWidth_g = imShowcorn_g.step / imShowcorn_g.elemSize();
-  int imShowCornOffset_g = imShowcorn_g.offset / imShowcorn_g.elemSize();
-  int imSrcWidth_g = imCurr_g.step / imCurr_g.elemSize();
-  int imSrcOffset_g = imCurr_g.offset / imCurr_g.elemSize();
-  int imSrcTrueWidth_g = imCurr.size().width;
-  int imSrcTrueHeight_g = imCurr.size().height;
-  int maxCornersPerBlock_g = maxCornersPerBlock;
-  int invalidFlowVal_g = invalidFlow;
-  int foundPointsBlockWidth_g = foundPointsX_g.step /foundPointsX_g.elemSize();
 
   k_CornerPoints.args(
       cv::ocl::KernelArg::ReadOnly(imCurr_g),
-      cv::ocl::KernelArg::WriteOnlyNoSize(imShowcorn_g),
+      cv::ocl::KernelArg::WriteOnlyNoSize(imShowCorn_g),
       cv::ocl::KernelArg::PtrWriteOnly(foundPointsX_g),
       cv::ocl::KernelArg::WriteOnly(foundPointsY_g),
-      numFoundBlock_g,
       cv::ocl::KernelArg::PtrWriteOnly(foundPtsX_ord_g),
       cv::ocl::KernelArg::PtrWriteOnly(foundPtsY_ord_g),
+      numFoundBlock_g,
       foundPtsSize_g);
 
-  if (k_CornerPoints.run(2,gridA,blockA,true)){
+  if (k_CornerPoints.run(2,globalA,blockA,true)){
     ROS_INFO("pass");
   }
   else
     ROS_INFO("fail");
 
+//  k_Tester.args(
+//      cv::ocl::KernelArg::ReadWriteNoSize(imShowcorn_g));
+//  k_Tester.run(2,globalA,blockA,true);
+  
   clEnqueueReadBuffer(
       cqu,
       foundPtsSize_g,
@@ -381,43 +391,6 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
 
   ROS_INFO("Number of points for next phase is %d",foundPtsSize);
 
-/*
-  args.push_back( std::make_pair( sizeof(cl_int), (void *) &imSrcTrueWidth_g));
-  args.push_back( std::make_pair( sizeof(cl_mem), (void *) &imShowcorn_g.data ));
-  args.push_back( std::make_pair( sizeof(cl_int), (void *) &imShowCornWidth_g));
-  args.push_back( std::make_pair( sizeof(cl_int), (void *) &imShowCornOffset_g));
-  args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPointsX_g.data));
-  args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPointsY_g.data));
-  args.push_back( std::make_pair( sizeof(cl_int), (void *) &foundPointsBlockWidth_g));
-  args.push_back( std::make_pair( sizeof(cl_mem), (void *) &numFoundBlock_g));
-  args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPtsX_ord_g.data));
-  args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPtsY_ord_g.data));
-  args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPtsSize_g));
-  args.push_back( std::make_pair( sizeof(cl_int), (void *) &maxCornersPerBlock_g));
-*/
- /* 
-  cv::ocl::openCLExecuteKernelInterop(context,
-      *program,
-      "CornerPoints",
-      globalA,
-      blockA,
-      args,
-      1,
-      0,
-      NULL);
-
-  clEnqueueReadBuffer(
-      *(cl_command_queue*)(cv::ocl::Context::getContext()->getOpenCLCommandQueuePtr()),
-      foundPtsSize_g,
-      CL_TRUE,
-      0,
-      sizeof(cl_int),
-      &foundPtsSize,
-      0,
-      NULL,
-      NULL);
-
-  ROS_INFO("Number of points for next phase is %d",foundPtsSize);
 
   if ( (foundPtsSize > 0) && (!first) && (true))
   {
@@ -430,94 +403,58 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     int gridA_height_g = gridA[1];
     int gridC_width_g = gridC[0];
     int gridC_height_g = gridC[1];
-    int cellSize_g = cellSize;
     int surroundRadius_g = surroundRadius;
-    int cellOverlay_g = cellOverlay;
 
-    args.clear();
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &imCurr_g.data ));
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &imPrev_g.data ));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &imSrcWidth_g));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &imSrcOffset_g));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &imSrcTrueWidth_g));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &imSrcTrueHeight_g));
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPtsX_ord_g.data));
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPtsY_ord_g.data));
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPointsX_prev_g.data));
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPointsY_prev_g.data));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &foundPointsBlockWidth_g));
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &numFoundBlock_prev_g));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &maxCornersPerBlock_g));
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &imShowcorn_g.data ));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &imShowCornWidth_g));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &imShowCornOffset_g));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &samplePointSize));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &blockA_g));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &gridA_width_g));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &gridA_height_g));
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPtsX_ord_flow_g.data));
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &foundPtsY_ord_flow_g.data));
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &cellFlowX_g));
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &cellFlowY_g));
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &cellFlowNum_g));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &gridC_width_g));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &cellSize_g));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &cellOverlay_g));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &invalidFlowVal_g));
+    k_OptFlow.args(
+        cv::ocl::KernelArg::PtrReadOnly(imCurr_g),
+      cv::ocl::KernelArg::ReadOnly(imPrev_g),
+      cv::ocl::KernelArg::PtrReadOnly(foundPtsX_ord_g),
+      cv::ocl::KernelArg::PtrReadOnly(foundPtsY_ord_g),
+      cv::ocl::KernelArg::PtrReadOnly(foundPointsX_prev_g),
+      cv::ocl::KernelArg::ReadOnlyNoSize(foundPointsY_prev_g),
+      numFoundBlock_prev_g,
+      cv::ocl::KernelArg::WriteOnlyNoSize(imShowCorn_g),
+      gridA_width_g,
+      gridA_height_g,
+      cv::ocl::KernelArg::PtrWriteOnly(foundPtsX_ord_flow_g),
+      cv::ocl::KernelArg::PtrWriteOnly(foundPtsY_ord_flow_g),
+      cellFlowX_g,
+      cellFlowY_g,
+      cellFlowNum_g,
+      gridC_width_g);
 
-    
-    cv::ocl::openCLExecuteKernelInterop(cv::ocl::Context::getContext(),
-        *program,
-        "OptFlowReduced",
-        globalB,
-        blockB,
-        args,
-        1,
-        0,
-        NULL);
+
+
+    k_OptFlow.run(2,globalB,blockB,true);
+
 
     outA_g = cv::Scalar(0);
     outB_g = cv::Scalar(0);
     outC_g = cv::Scalar(0);
-    int outWidth_g = outA_g.step / outA_g.elemSize(); 
 
-    args.clear();
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &outA_g.data ));
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &outB_g.data ));
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &outC_g.data ));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &outWidth_g));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &cellSize_g));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &cellOverlay_g));
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &cellFlowX_g));
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &cellFlowY_g));
-    args.push_back( std::make_pair( sizeof(cl_mem), (void *) &cellFlowNum_g));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &gridC_width_g));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &invalidFlowVal_g));
-    args.push_back( std::make_pair( sizeof(cl_int), (void *) &surroundRadius_g));
-
-    
-    cv::ocl::openCLExecuteKernelInterop(cv::ocl::Context::getContext(),
-        *program,
-        "BordersSurround",
-        globalC,
-        blockC,
-        args,
-        1,
-        0,
-        NULL);
+    k_BordersSurround.args(
+        cv::ocl::KernelArg::PtrWriteOnly(outA_g),
+        cv::ocl::KernelArg::PtrWriteOnly(outB_g),
+        cv::ocl::KernelArg::WriteOnlyNoSize(outC_g),
+        cellFlowX_g,
+        cellFlowY_g,
+        cellFlowNum_g,
+        gridC_width_g
+        );
+    k_BordersSurround.run(2,globalC,blockC,true);
     
   }     
   cv::Mat foundPtsX_ord_flow, foundPtsY_ord_flow, foundPtsX_ord, foundPtsY_ord;
-  foundPtsX_ord_flow = foundPtsX_ord_flow_g.getMat();
-  foundPtsY_ord_flow = foundPtsY_ord_flow_g.getMat();
-  foundPtsX_ord = foundPtsX_ord_g.getMat();
-  foundPtsY_ord = foundPtsY_ord_g.getMat();
-  activationmap = outA_g.getMat();
-  averageX = outB_g.getMat();
-  averageY = outC_g.getMat();
+   foundPtsX_ord_flow_g.copyTo(foundPtsX_ord_flow);
+   foundPtsY_ord_flow_g.copyTo(foundPtsY_ord_flow);
+   foundPtsX_ord_g.copyTo(foundPtsX_ord);
+  foundPtsY_ord_g.copyTo(foundPtsY_ord);
+  outA_g.copyTo(activationmap);
+  outB_g.copyTo(averageX);
+  outC_g.copyTo(averageY);
 
   clEnqueueCopyBuffer(
-      *(cl_command_queue*)(cv::ocl::Context::getContext()->getOpenCLCommandQueuePtr()),
+      cqu,
       numFoundBlock_g,
       numFoundBlock_prev_g,
       0,
@@ -530,30 +467,30 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   foundPointsX_g.copyTo(foundPointsX_prev_g);
   foundPointsY_g.copyTo(foundPointsY_prev_g);
 
-  clFinish(*(cl_command_queue*)(cv::ocl::Context::getContext()->getOpenCLCommandQueuePtr()));
 
-  */
 
-  cv::Mat imshowcorn;
-  imshowcorn = imShowcorn_g.getMat(cv::ACCESS_READ);
+  cv::Mat imShowCorn = cv::Mat(imCurr.size(),imCurr.type());
+    if (!first){
+    imShowCorn_g.copyTo(imShowCorn);
+    }
   if (debug)
   {
     // ROS_INFO("out: %dx%d",outX_l.cols,outX_l.rows);
   }
   if (gui)
   {
-    if (true)
-      cv::imshow("corners",imShowcorn_g);
-  //  else
-  //    showFlow(
-  //        foundPtsX_ord,
-  //        foundPtsY_ord,
-  //        foundPtsX_ord_flow,
-  //        foundPtsY_ord_flow,
-  //        false,
-  //        activationmap,
-  //        averageX,
-  //        averageY);
+    if (false)
+      cv::imshow("corners",imShowCorn);
+    else
+      showFlow(
+          foundPtsX_ord,
+          foundPtsY_ord,
+          foundPtsX_ord_flow,
+          foundPtsY_ord_flow,
+          false,
+          activationmap,
+          averageX,
+          averageY);
   }
 
   imPrev = imCurr.clone();

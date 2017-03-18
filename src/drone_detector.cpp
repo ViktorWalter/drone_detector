@@ -70,9 +70,6 @@ public:
 
 //      cv::Mat testmat;
       vc.set(CV_CAP_PROP_POS_MSEC,(7*60+18)*1000);
-//        vc.read(testmat);
-//        cv::imshow("main",testmat);
-//        cv::waitKey(10);
 
         private_node_handle.param("cellSize", cellSize, int(32));
         private_node_handle.param("cellOverlay", cellOverlay, int(8));
@@ -165,7 +162,6 @@ public:
                   cellSize,
                   cellOverlay,
                   surroundRadius);
-
         if (bmm->initialized)
           ProcessCycle();
     }

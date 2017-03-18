@@ -42,6 +42,9 @@ private:
     cv::UMat foundPointsY_g;
     cv::UMat foundPointsX_prev_g;
     cv::UMat foundPointsY_prev_g;
+    cv::UMat activationMap_g;
+    cv::UMat averageX_g;
+    cv::UMat averageY_g;
     cl_mem foundPtsSize_g;
     cl_mem numFoundBlock_g;
     cl_mem numFoundBlock_prev_g;
@@ -67,9 +70,6 @@ private:
     cv::VideoWriter outputVideo;
    
     cv::Mat imPrev, imCurr, imView;
-    cv::Mat activationmap;
-    cv::Mat averageX;
-    cv::Mat averageY;
 
     cv::Size monitorSize;
 
@@ -98,14 +98,14 @@ public:
 
 private:
     void showFlow(
-        const cv::Mat posx,
-        const cv::Mat posy,
-        const cv::Mat flowx,
-        const cv::Mat flowy,
+        const cv::UMat posx,
+        const cv::UMat posy,
+        const cv::UMat flowx,
+        const cv::UMat flowy,
         bool blankBG,
-        const cv::Mat actMap,
-        const cv::Mat avgX,
-        const cv::Mat avgY
+        const cv::UMat actMap,
+        const cv::UMat avgX,
+        const cv::UMat avgY
         );
     void drawOpticalFlow(
         const cv::Mat_<ushort>& posx,

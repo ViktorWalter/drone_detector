@@ -1,17 +1,24 @@
 #define i1__at(x,y) input_1[mad24(y,imgSrcStep,(imgSrcOffset + x))]
 #define i2__at(x,y) input_2[mad24(y,imgSrcStep,(imgSrcOffset + x))]
 #define arraySize 50
-#define MinValThreshold mul24(samplePointSize2,20)//*1*prevFoundNum[currLine])
-#define MaxAbsDiffThreshold mul24(samplePointSize2,10)
+#define MinValThreshold mul24(samplePointSize2,15)//*1*prevFoundNum[currLine])
+//#define MaxAbsDiffThreshold mul24(samplePointSize2,10)
 #define FastThresh 30
 #define CornerArraySize 10
 #define maxNumOfBlocks 2000
 #define shiftRadius 1
 #define maxDistMultiplier 1.5
 #define threadsPerCornerPoint 32
-#define distanceWeight (samplePointSize2*0.05)
+#define distanceWeight 0.03
 #define excludedPoint -1
 #define minPointsThreshold 4
+//#define addSelf 
+//#define allPoints
+#define alphaWeight 05.0
+#define alphaDiffClose 0.25
+#define lenWeight 0.5
+#define trustMultiplierCount 0.15
+#define trustMultiplierMemory 0.85
 
 __kernel void CornerPoints(
     __global uchar* input_1, int imgSrcStep, int imgSrcOffset, int imgSrcHeight, int imgSrcWidth,
@@ -33,18 +40,22 @@ __kernel void CornerPoints(
   int threadX = get_local_id(0);
   int threadY = get_local_id(1);
   int blockSize = get_local_size(0);
-
-
+  int indexLocal;
+  int indexGlobal;
 
   int repetitions = 1; //ceil(ScanDiameter/(float)threadDiameter);
-
  // int maxij = blockSize*repetitions-3;
   numFoundBlock[mad24(blockY,blockNumX,blockX)] = 0;
+
+  __local int occupiedField[arraySize][arraySize];
+  occupiedField[threadY][threadX] = 0;
+
   barrier(CLK_LOCAL_MEM_FENCE);
 
   for (int m=0; m<repetitions; m++)
     for (int n=0; n<repetitions; n++)
     {
+
       int i = mad24(n,blockSize,threadX);
       int j = mad24(m,blockSize,threadY);
       int x = mad24(blockX,blockSize,i);
@@ -73,11 +84,13 @@ __kernel void CornerPoints(
 //          foundPtsSize[0] =blockNumY;
 //          return;
 
+#ifdef allPoints
         if ( (l>=3) || (h>=3) )
+#else
+        if ( (l>3) || (h>3) )
+#endif
         {
-          char sg = 1;
-          if (l >=3)
-            sg = -1;
+          char sg = (l >=3)?-1:1;
           I[2] = i1__at(mad24(blockX,(blockSize),(i+1)),mad24(blockY,(blockSize),(j-3)));
           I[3] = i1__at(mad24(blockX,(blockSize),(i+2)),mad24(blockY,(blockSize),(j-2)));
           I[4] = i1__at(mad24(blockX,(blockSize),(i+3)),mad24(blockY,(blockSize),(j-1)));
@@ -123,27 +136,33 @@ __kernel void CornerPoints(
             }
           }
           if ( (cadj + cadj_b) >= 12) {
-            int indexLocal;
-            int indexGlobal;
+
+            atomic_cmpxchg(&occupiedField[threadY][threadX],0,1);
+            atomic_cmpxchg(&occupiedField[threadY+1][threadX],1,2);
+            atomic_cmpxchg(&occupiedField[threadY][threadX+1],1,2);
+            atomic_cmpxchg(&occupiedField[threadY][threadX],
+                (occupiedField[threadY][threadX+1] != 1)&&
+                (occupiedField[threadY+1][threadX]!=1),
+                1);
+
             indexLocal = atomic_inc(&(numFoundBlock[mad24(blockY,blockNumX,blockX)]));
             indexGlobal = atomic_inc(&(foundPtsSize[0]));
+
             if (indexLocal <= maxCornersPerBlock)
             {
               output_view[
                 mad24(mad24(blockY,(blockSize),j),showCornStep,mad24(blockX,blockSize,i+showCornOffset)) ] =
-                30;
+                  30;
               foundPointsX[mad24(mad24(blockY,blockNumX,blockX),foundPointsStep2,indexLocal)]=
-                  mad24(blockX,blockSize,i);
+                mad24(blockX,blockSize,i);
               foundPointsY[mad24(mad24(blockY,blockNumX,blockX),foundPointsStep2,indexLocal)]=
-                  mad24(blockY,blockSize,j);
+                mad24(blockY,blockSize,j);
             }
-            foundPtsX_ord[indexGlobal] =
-              mad24(blockX,blockSize,i);
-            foundPtsY_ord[indexGlobal] =
-              mad24(blockY,blockSize,j);
-            barrier(CLK_LOCAL_MEM_FENCE);
-            if (indexLocal >= maxCornersPerBlock){
-              numFoundBlock[mad24(blockY,blockNumX,blockX)] = maxCornersPerBlock;
+            if (occupiedField[threadY][threadX] == 1){
+              foundPtsX_ord[indexGlobal] =
+                mad24(blockX,blockSize,i);
+              foundPtsY_ord[indexGlobal] =
+                mad24(blockY,blockSize,j);
             }
           }
 
@@ -151,6 +170,10 @@ __kernel void CornerPoints(
         }
       }
     }
+  barrier(CLK_LOCAL_MEM_FENCE);
+  if (indexLocal >= maxCornersPerBlock){
+    numFoundBlock[mad24(blockY,blockNumX,blockX)] = maxCornersPerBlock;
+  }
   return;
 }
 
@@ -160,6 +183,7 @@ __kernel void OptFlowReduced(
     __constant unsigned char* input_2, int imgSrcStep, int imgSrcOffset, int imgSrcHeight, int imgSrcWidth,
     __constant ushort* foundPtsX,
     __constant ushort* foundPtsY,
+    __constant bool* exclusions,
     __constant short* prevFoundBlockX,
     __constant short* prevFoundBlockY, int prevFoundBlockStep, int prevFoundBlockOffset,
     __constant int* prevFoundNum,
@@ -174,6 +198,8 @@ __kernel void OptFlowReduced(
     int outputFlowBlockWidth
     )
 {
+  if (exclusions[get_group_id(0)])
+    return;
   int prevFoundBlockStep2 = prevFoundBlockStep/sizeof(short);
   int prevFoundBlockOffset2 = prevFoundBlockOffset/sizeof(short);
   int block = get_group_id(0);
@@ -197,6 +223,7 @@ __kernel void OptFlowReduced(
   int currBlockY = posY/firstStepBlockSize;
   int currLine = mad24(currBlockY,prevBlockWidth,currBlockX);
   int d = outputFlowFieldSize - outputFlowFieldOverlay;
+  int distanceWeightAbsolute = samplePointSize2*distanceWeight;
 
 
   barrier(CLK_LOCAL_MEM_FENCE);
@@ -214,28 +241,28 @@ __kernel void OptFlowReduced(
     if (( blockShiftX > shiftRadius) || ( blockShiftY > shiftRadius) )
       break;
 
-//    counter++;
-//    if (counter == 720) {
-//      watchdog = true;
-//      break;
-//    }
-//
-//    if ((currBlockX + blockShiftX) < 0) {
-//      blockShiftX++;
-//      continue;
-//    }
-//    if ((currBlockX + blockShiftX) >= prevBlockWidth) {
-//      blockShiftY++;
-//      blockShiftX = -shiftRadius;
-//      continue;
-//    }
-//    if ((currBlockY + blockShiftY) < 0) {
-//      blockShiftY++;
-//      continue;
-//    }
-//    if ((currBlockY + blockShiftY) >= prevBlockHeight) {
-//      break;
-//    }
+    counter++;
+    if (counter == 720) {
+      watchdog = true;
+      break;
+    }
+
+    if ((currBlockX + blockShiftX) < 0) {
+      blockShiftX++;
+      continue;
+    }
+    if ((currBlockX + blockShiftX) >= prevBlockWidth) {
+      blockShiftY++;
+      blockShiftX = -shiftRadius;
+      continue;
+    }
+    if ((currBlockY + blockShiftY) < 0) {
+      blockShiftY++;
+      continue;
+    }
+    if ((currBlockY + blockShiftY) >= prevBlockHeight) {
+      break;
+    }
 
     lineNum = mad24((currBlockY + blockShiftY),prevBlockWidth,(currBlockX + blockShiftX));
     if (prevFoundNum[lineNum] > 0) {
@@ -279,10 +306,12 @@ __kernel void OptFlowReduced(
     }
   }
 
+#ifdef addSelf  
   //add current position in the previous image to consideration
-//  Xpositions[pointsHeld] = posX;
-//  Ypositions[pointsHeld] = posY;
-//  pointsHeld++;
+  Xpositions[pointsHeld] = posX;
+  Ypositions[pointsHeld] = posY;
+  pointsHeld++;
+#endif
 
 
   int repetitionsOverCorners = (pointsHeld/threadNumX)+1;
@@ -299,20 +328,21 @@ __kernel void OptFlowReduced(
       if (threadY == 0) {
         int dx = Xpositions[indexLocal] - posX;
         int dy = Ypositions[indexLocal] - posY;
-        int distPenalty = mul24(distanceWeight,mad24(dx,dx,mul24(dy,dy)));// (int)(distanceWeight*sqrt((float)(dx*dx+dy*dy)));
+        int distPenalty = mul24(distanceWeightAbsolute,mad24(dx,dx,mul24(dy,dy)));
         atomic_add(&abssum[indexLocal],distPenalty);
       }
       for (int m=0;m<repetitionsOverPixels;m++) {
         int indexPixel = mad24(n,threadNumY,threadY);
         int i = indexPixel % samplePointSize;
         int j = indexPixel / samplePointSize;
-        atomic_add(&(abssum[indexLocal]),
-            abs_diff(
-              i1__at(posX+i+corner,posY+j+corner)
-              ,
-              i2__at(posX_prev+i+corner,posY_prev+j+corner)
-              )
-            );
+        if ((i<samplePointSize) && (j<samplePointSize))
+          atomic_add(&(abssum[indexLocal]),
+              abs_diff(
+                i1__at(posX+i+corner,posY+j+corner)
+                ,
+                i2__at(posX_prev+i+corner,posY_prev+j+corner)
+                )
+              );
       }
     }
   }
@@ -344,15 +374,17 @@ __kernel void OptFlowReduced(
     //      return;
     //    if ((resY > imgSrcHeight) || (resY < 0))
     //      return;
-    if ( (minI < (pointsHeld-1)) && ((abssum[pointsHeld-1] - minval) <= MaxAbsDiffThreshold))  //if the difference is small, then it is considered to be noise in a uniformly colored area
-      {
-     //   resX = Xpositions[pointsHeld-1];
-     //   resY = Ypositions[pointsHeld-1];
-      resY = invalidFlowVal;
-      resX = invalidFlowVal;
-      output_view[mad24(posY,showCornStep,posX+showCornOffset) ] = 100;
-      }
-    else if ( ((minval) >= MinValThreshold) && (true))  //if the value is great, then it is considered to be too noisy, blurred or with too great a shift
+//    if ( (minI < (pointsHeld-1)) &&
+//        ((abssum[pointsHeld-1] - minval) <= MaxAbsDiffThreshold) &&
+//        (false) )//if the difference is small, then it is considered to be noise in a uniformly colored area
+//      {
+//     //   resX = Xpositions[pointsHeld-1];
+//     //   resY = Ypositions[pointsHeld-1];
+//      resY = invalidFlowVal;
+//      resX = invalidFlowVal;
+//      output_view[mad24(posY,showCornStep,posX+showCornOffset) ] = 100;
+//      }
+    if ( ((minval) >= MinValThreshold) && (true))  //if the value is great, then it is considered to be too noisy, blurred or with too great a shift
     {
       resY = invalidFlowVal;
       resX = invalidFlowVal;
@@ -413,6 +445,7 @@ __kernel void OptFlowReduced(
 
 __kernel void BordersSurround(
     __global short* outA,
+    __global short* prevA,
     __global short* outB,
     __global short* outC,
     int outStep,
@@ -428,6 +461,7 @@ __kernel void BordersSurround(
   int blockX = get_group_id(0);
   int blockY = get_group_id(1);
   int blockNumX = get_num_groups(0);
+  int blockNumY = get_num_groups(1);
   int threadX = get_local_id(0);
   int threadY = get_local_id(1);
   int threadNumX = get_local_size(0);
@@ -438,7 +472,7 @@ __kernel void BordersSurround(
   int currIndexSurr;
 
   if (inNum[currIndexCenter] < minPointsThreshold) {
-    outA[currIndexOutput] = 0;
+    outA[currIndexOutput] = trustMultiplierMemory*prevA[currIndexOutput];
     outB[currIndexOutput] = 0;
     outC[currIndexOutput] = 0;
     return;
@@ -450,10 +484,16 @@ __kernel void BordersSurround(
   float avgInX = inX[currIndexCenter]/(float)inNum[currIndexCenter];
   float avgInY = inY[currIndexCenter]/(float)inNum[currIndexCenter];
 
-  for (int i = -surroundRadius; i <= surroundRadius; i++) {
-    for (int j = -surroundRadius; j <= surroundRadius; j++) {
+  for (int j = -surroundRadius; j <= surroundRadius; j++) {
+    for (int i = -surroundRadius; i <= surroundRadius; i++) {
       if ((i!=0)||(j!=0)){
-        currIndexSurr = mad24(blockY+j,inStep,blockX+i);
+        int X = blockX+i;
+        int Y = blockY+j;
+        if ( (X<0) || (X>=blockNumX) || (Y<0) )
+          continue;
+        if ( (Y>=blockNumY) )
+          break;
+        currIndexSurr = mad24(Y,inStep,X);
         if (inNum[currIndexSurr] != 0){
           avgOutX += inX[currIndexSurr]; 
           avgOutY += inY[currIndexSurr]; 
@@ -472,83 +512,48 @@ __kernel void BordersSurround(
     avgOutY = avgOutY/cntOut;
   }
 
+  float lenOut = native_sqrt(avgOutX*avgOutX+avgOutY*avgOutY);
+  float lenIn  = native_sqrt(avgInX*avgInX  +avgInY*avgInY);
+  float lenDiff = fabs(lenOut - lenIn);
+  
+  float alphaDiff;
+  if ( (lenOut >= 1.0) && (lenIn >= 1.0) ) { 
+    float alphaOut  = atan2pi(avgOutX,avgOutY);
+    float alphaIn  = atan2pi(avgInX,avgInY);
+    alphaDiff = fabs(alphaOut - alphaIn);
+    alphaDiff = fmin(alphaDiff,2-alphaDiff);
+  }
+  else {
+    alphaDiff = 0;
+  }
+
 
   float dx = avgOutX - avgInX;
   float dy = avgOutY - avgInY;
-  outA[currIndexOutput] = (short)sqrt(dx*dx+dy*dy);//*(cntOut/inNum[currIndexCenter]);
+  int estimPrevCellX = blockX + (int)round(-avgInX/(float)(outputFlowFieldSize-outputFlowFieldOverlay));
+  int estimPrevCellY = blockY + (int)round(-avgInY/(float)(outputFlowFieldSize-outputFlowFieldOverlay));
+  int estimPrevCellIndex = mad24(estimPrevCellY,outStep2,estimPrevCellX);
+
+
+
+  float trustCount = inNum[currIndexCenter]*trustMultiplierCount;
+//  float Memory = (prevA[estimPrevCellIndex]>3 ?
+//      fmin(prevA[estimPrevCellIndex]*trustMultiplierMemory,2):
+//      0.0f);
+  int activation = (int)(
+      (trustCount)*
+      (alphaDiff>alphaDiffClose?
+        (float)(alphaDiff*alphaWeight):
+        (float)(lenDiff*lenWeight)
+        )
+      );
+  int prevActivation = prevA[estimPrevCellIndex];
+
+  activation = (int)(activation + trustMultiplierMemory*(prevActivation));
+
+  outA[currIndexOutput] = (short)activation;
   outB[currIndexOutput] = (short)avgInX;
   outC[currIndexOutput] = (short)avgInY;
-//  int blockShiftX = -shiftRadius;
-//  int blockShiftY = -shiftRadius;
-//  int colNum = 0;
-//  int lineNum;
-//  int pointsHeld = 0;
-//  
-//  while ((blockShiftY <= shiftRadius)) {
-//    if (( blockShiftX > shiftRadius) || ( blockShiftY > shiftRadius) )
-//      break;
-//
-//
-//    if ((currBlockX + blockShiftX) < 0) {
-//      blockShiftX++;
-//      continue;
-//    }
-//    if ((currBlockX + blockShiftX) >= prevBlockWidth) {
-//      blockShiftY++;
-//      blockShiftX = -shiftRadius;
-//      continue;
-//    }
-//    if ((currBlockY + blockShiftY) < 0) {
-//      blockShiftY++;
-//      continue;
-//    }
-//    if ((currBlockY + blockShiftY) >= prevBlockHeight) {
-//      break;
-//    }
-//
-//    lineNum = (currBlockY + blockShiftY)*prevBlockWidth + (currBlockX + blockShiftX);
-//    if (prevFoundNum[lineNum] > 0) {
-//      int consideredX;
-//      int consideredY;
-//      consideredX = prevFoundBlockX[lineNum*prevFoundBlockWidth+colNum];
-//      consideredY = prevFoundBlockY[lineNum*prevFoundBlockWidth+colNum];
-//      if (pointsHeld > 0)
-//        if ((consideredX == Xpositions[pointsHeld-1]) && (consideredY == Ypositions[pointsHeld-1])){
-//          watchdog = true;
-//          break;
-//        }
-//
-//
-//      if (
-//          (consideredX >= (-corner))
-//          &&(consideredY >= (-corner))
-//          &&(consideredX<(imgSrcWidth+corner))
-//          &&(consideredY<(imgSrcHeight+corner))
-//          &&(consideredX != excludedPoint)
-//         ){
-//      //  int dx = posX - consideredX;
-//      //  int dy = posY - consideredY;
-//      //  float dist2 = dx*dx+dy*dy;
-//      //  if (dist2 <= maxdist2)
-//        {
-//          Xpositions[pointsHeld] = consideredX;
-//          Ypositions[pointsHeld] = consideredY;
-//          pointsHeld++;
-//        }
-//      }
-//      colNum++;
-//    }
-//    if (colNum > (prevFoundNum[lineNum]-1)) {
-//      colNum = 0;
-//      if (blockShiftX < shiftRadius) {
-//        blockShiftX++;
-//      }
-//      else { 
-//        blockShiftX = -shiftRadius;
-//        blockShiftY++;
-//      }
-//    }
-//  }
 }
 
 __kernel void BordersGlobal_C1_D0(

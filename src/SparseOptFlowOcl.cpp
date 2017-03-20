@@ -6,6 +6,8 @@
 
 #define maxCornersPerBlock 96
 #define invalidFlow -5555
+#define enableBlankBG false
+#define maxPassedPoints 4000
 
 cv::Mat ResizeToFitRectangle(cv::Mat& src, cv::Size size) {
   if ((src.cols <= size.width) && (src.rows <= size.height))
@@ -246,9 +248,11 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     foundPointsX_g = cv::Scalar(0);
     foundPointsY_g = cv::Scalar(0);
     activationMap_g = cv::UMat(cv::Size(gridC[0],gridC[1]),CV_16SC1);
+    activationMap_prev_g = cv::UMat(cv::Size(gridC[0],gridC[1]),CV_16SC1);
     averageX_g = cv::UMat(cv::Size(gridC[0],gridC[1]),CV_16SC1);
     averageY_g = cv::UMat(cv::Size(gridC[0],gridC[1]),CV_16SC1);
     activationMap_g = cv::Scalar(0);
+    activationMap_prev_g = cv::Scalar(0);
     averageX_g = cv::Scalar(0);
     averageY_g = cv::Scalar(0);
 
@@ -371,11 +375,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
       numFoundBlock_g,
       foundPtsSize_g);
 
-  if (k_CornerPoints.run(2,globalA,blockA,true)){
-    ROS_INFO("pass");
-  }
-  else
-    ROS_INFO("fail");
+  k_CornerPoints.run(2,globalA,blockA,true);
 
 //  k_Tester.args(
 //      cv::ocl::KernelArg::ReadWriteNoSize(imShowcorn_g));
@@ -392,7 +392,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
       NULL,
       NULL);
 
-  ROS_INFO("Number of points for next phase is %d",foundPtsSize);
+  ROS_INFO("Number of found points for next phase: %d",foundPtsSize);
 
 
   if ( (foundPtsSize > 0) && (!first) && (true))
@@ -409,23 +409,53 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     int gridC_height_g = gridC[1];
     int surroundRadius_g = surroundRadius;
 
-    k_OptFlow.args(
-        cv::ocl::KernelArg::PtrReadOnly(imCurr_g),
-      cv::ocl::KernelArg::ReadOnly(imPrev_g),
-      cv::ocl::KernelArg::PtrReadOnly(foundPtsX_ord_g),
-      cv::ocl::KernelArg::PtrReadOnly(foundPtsY_ord_g),
-      cv::ocl::KernelArg::PtrReadOnly(foundPointsX_prev_g),
-      cv::ocl::KernelArg::ReadOnlyNoSize(foundPointsY_prev_g),
-      numFoundBlock_prev_g,
-      cv::ocl::KernelArg::WriteOnlyNoSize(imShowCorn_g),
-      gridA_width_g,
-      gridA_height_g,
-      cv::ocl::KernelArg::PtrWriteOnly(foundPtsX_ord_flow_g),
-      cv::ocl::KernelArg::PtrWriteOnly(foundPtsY_ord_flow_g),
-      cellFlowX_g,
-      cellFlowY_g,
-      cellFlowNum_g,
-      gridC_width_g);
+    if (foundPtsSize > maxPassedPoints){
+      ROS_INFO("Trimming to approximately %d",maxPassedPoints);
+    }
+    cl_bool *exclusions = new cl_bool[foundPtsSize];
+    float ratio = (maxPassedPoints/(float)foundPtsSize);
+    for (int i=0; i<foundPtsSize; i++){
+      float rnd = std::rand()/(float)RAND_MAX;
+      exclusions[i] = rnd > ratio; 
+    }
+
+    exclusions_g =
+      clCreateBuffer(
+          ctx,
+          CL_MEM_READ_WRITE,
+          sizeof(cl_bool)*foundPtsSize,
+          NULL,
+          NULL);
+    clEnqueueWriteBuffer(
+        cqu,
+        exclusions_g,
+        CL_TRUE,
+        0,
+        sizeof(cl_bool)*foundPtsSize,
+        exclusions,
+        0,
+        NULL,
+        NULL);
+
+    
+    int i;
+    i = k_OptFlow.set(0, cv::ocl::KernelArg::PtrReadOnly(imCurr_g));
+    i = k_OptFlow.set(i, cv::ocl::KernelArg::ReadOnly(imPrev_g));
+    i = k_OptFlow.set(i, cv::ocl::KernelArg::PtrReadOnly(foundPtsX_ord_g));
+    i = k_OptFlow.set(i, cv::ocl::KernelArg::PtrReadOnly(foundPtsY_ord_g));
+    i = k_OptFlow.set(i, exclusions_g);
+    i = k_OptFlow.set(i, cv::ocl::KernelArg::PtrReadOnly(foundPointsX_prev_g));
+    i = k_OptFlow.set(i, cv::ocl::KernelArg::ReadOnlyNoSize(foundPointsY_prev_g));
+    i = k_OptFlow.set(i, numFoundBlock_prev_g);
+    i = k_OptFlow.set(i, cv::ocl::KernelArg::WriteOnlyNoSize(imShowCorn_g));
+    i = k_OptFlow.set(i, gridA_width_g);
+    i = k_OptFlow.set(i, gridA_height_g);
+    i = k_OptFlow.set(i, cv::ocl::KernelArg::PtrWriteOnly(foundPtsX_ord_flow_g));
+    i = k_OptFlow.set(i, cv::ocl::KernelArg::PtrWriteOnly(foundPtsY_ord_flow_g));
+    i = k_OptFlow.set(i, cellFlowX_g);
+    i = k_OptFlow.set(i, cellFlowY_g);
+    i = k_OptFlow.set(i, cellFlowNum_g);
+    i = k_OptFlow.set(i, gridC_width_g);
 
     clock_t begin = clock();
 
@@ -439,6 +469,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
 
     k_BordersSurround.args(
         cv::ocl::KernelArg::PtrWriteOnly(activationMap_g),
+        cv::ocl::KernelArg::PtrReadOnly(activationMap_prev_g),
         cv::ocl::KernelArg::PtrWriteOnly(averageX_g),
         cv::ocl::KernelArg::WriteOnlyNoSize(averageY_g),
         cellFlowX_g,
@@ -470,6 +501,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
 
   foundPointsX_g.copyTo(foundPointsX_prev_g);
   foundPointsY_g.copyTo(foundPointsY_prev_g);
+  activationMap_g.copyTo(activationMap_prev_g);
 
 
 
@@ -491,7 +523,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
           foundPtsY_ord_g,
           foundPtsX_ord_flow_g,
           foundPtsY_ord_flow_g,
-          false,
+          enableBlankBG,
           activationMap_g,
           averageX_g,
           averageY_g);

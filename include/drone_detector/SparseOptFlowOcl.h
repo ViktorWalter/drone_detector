@@ -43,6 +43,7 @@ private:
     cv::UMat foundPointsX_prev_g;
     cv::UMat foundPointsY_prev_g;
     cv::UMat activationMap_g;
+    cv::UMat activationMap_prev_g;
     cv::UMat averageX_g;
     cv::UMat averageY_g;
     cl_mem foundPtsSize_g;
@@ -51,6 +52,7 @@ private:
     cl_mem cellFlowX_g;
     cl_mem cellFlowY_g;
     cl_mem cellFlowNum_g;
+    cl_mem exclusions_g;
 
     int samplePointSize;
     int scanRadius;

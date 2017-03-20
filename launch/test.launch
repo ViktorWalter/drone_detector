@@ -3,7 +3,7 @@
 					<arg name="uav_name" default="$(optenv UAV_NAME uav1)"/>
 					<arg name="gui" default="true"/>
 					<arg name="method" default="3"/>
-					<arg name="SamplePointSize" default="8"/>
+					<arg name="SamplePointSize" default="16"/>
 					<arg name="ScanRadius" default="8"/>
 					<arg name="StepSize" default="10"/>
 					<arg name="FrameSize" default="1000"/>
@@ -11,9 +11,9 @@
 					<arg name="useOdom" default="false"/>
 					<arg name="cameraRotated" default="false"/>
 					<arg name="VideoNumber" default="1"/>
-					<arg name="cellSize" default="32"/>
-					<arg name="cellOverlay" default="8"/>
-					<arg name="surroundRadius" default="4"/>
+					<arg name="cellSize" default="64"/>
+					<arg name="cellOverlay" default="16"/>
+					<arg name="surroundRadius" default="6"/>
 
 				<group ns="$(arg uav_name)">
 

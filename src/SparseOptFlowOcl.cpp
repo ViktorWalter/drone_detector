@@ -595,7 +595,7 @@ void SparseOptFlowOcl::drawOpticalFlow(
   {
     if (flowx.at<short>(0, i) == invalidFlow)
     {
-      imView.at<cv::Vec3b>(posy.at<ushort>(0,i),posx.at<ushort>(0,i)) = cv::Vec3b(0,0,0);
+      imView.at<cv::Vec3b>(posy.at<ushort>(0,i),posx.at<ushort>(0,i)) = cv::Vec3b(255,0,255);
     }
     else if (flowx.at<short>(0,i) == 8000)
     {

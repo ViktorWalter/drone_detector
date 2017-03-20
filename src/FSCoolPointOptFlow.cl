@@ -138,12 +138,9 @@ __kernel void CornerPoints(
           if ( (cadj + cadj_b) >= 12) {
 
             atomic_cmpxchg(&occupiedField[threadY][threadX],0,1);
-            atomic_cmpxchg(&occupiedField[threadY+1][threadX],1,2);
-            atomic_cmpxchg(&occupiedField[threadY][threadX+1],1,2);
-            atomic_cmpxchg(&occupiedField[threadY][threadX],
-                (occupiedField[threadY][threadX+1] != 1)&&
-                (occupiedField[threadY+1][threadX]!=1),
-                1);
+            
+            atomic_cmpxchg(&occupiedField[threadY][threadY],atomic_cmpxchg(&occupiedField[threadY][threadX+1],1,0),1);
+            atomic_cmpxchg(&occupiedField[threadY][threadY],atomic_cmpxchg(&occupiedField[threadY+1][threadX],1,0),1);
 
             indexLocal = atomic_inc(&(numFoundBlock[mad24(blockY,blockNumX,blockX)]));
             indexGlobal = atomic_inc(&(foundPtsSize[0]));

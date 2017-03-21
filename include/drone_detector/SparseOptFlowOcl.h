@@ -31,6 +31,7 @@ private:
     int max_wg_size;
 
     cv::UMat imCurr_g;
+    cv::UMat imCurr_bw_g;
     cv::UMat imPrev_g;
 
 //    cv::UMat foundPointsX_g;
@@ -71,7 +72,7 @@ private:
 
     cv::VideoWriter outputVideo;
    
-    cv::Mat imPrev, imCurr, imView;
+    cv::Mat imView;
 
     cv::Size monitorSize;
 
@@ -92,7 +93,7 @@ public:
 
     void setImPrev(cv::Mat imPrev_t)
     {
-      imPrev = imPrev_t;
+      imPrev_g = imPrev_t.getUMat(cv::ACCESS_READ);
     }
 
     bool initialized;

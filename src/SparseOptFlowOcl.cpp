@@ -206,7 +206,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
 {
   if (first)
   {
-    imPrev = imCurr_t.clone();
+    imCurr_t.copyTo(imPrev_g);
   }
 
   std::vector<cv::Point2f> outvec;
@@ -221,19 +221,18 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   int blockszX = viableSD;
   int blockszY = viableSD;
 
-  imCurr = imCurr_t.clone();
+  imCurr_t.copyTo(imCurr_g);
   imView = imView_t.clone();
+  cv::cvtColor(imCurr_g, imCurr_bw_g, CV_RGB2GRAY);
 
-  imPrev_g = imPrev.getUMat(cv::ACCESS_READ);
-  imCurr_g = imCurr.getUMat(cv::ACCESS_READ);
 
-  std::size_t gridA[3] = {(imPrev.cols)/(blockszX),(imPrev.rows)/(blockszY),1};
+  std::size_t gridA[3] = {(imCurr_g.cols)/(blockszX),(imCurr_g.rows)/(blockszY),1};
   std::size_t blockA[3] = {viableSD,viableSD,1};
   std::size_t globalA[3] = {gridA[0]*blockA[0],gridA[1]*blockA[1],1};
   std::size_t one[3] = {1,1,1};
   
   int d = cellSize-cellOverlay;
-  std::size_t gridC[3] = {imCurr.cols/d,imCurr.rows/d,1};
+  std::size_t gridC[3] = {imCurr_g.cols/d,imCurr_g.rows/d,1};
   std::size_t blockC[3] = {1,1,1};
   std::size_t globalC[3] = {gridC[0]*blockC[0],gridC[1]*blockC[1],1};
 
@@ -367,7 +366,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   foundPtsY_ord_flow_g = cv::Scalar(invalidFlow);
 
   k_CornerPoints.args(
-      cv::ocl::KernelArg::ReadOnly(imCurr_g),
+      cv::ocl::KernelArg::ReadOnly(imCurr_bw_g),
       cv::ocl::KernelArg::WriteOnlyNoSize(imShowCorn_g),
       cv::ocl::KernelArg::PtrWriteOnly(foundPointsX_g),
       cv::ocl::KernelArg::WriteOnly(foundPointsY_g),
@@ -438,10 +437,13 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
         NULL,
         NULL);
 
+    int elemSize_g = (int)imCurr_g.elemSize();
+//    ROS_INFO("offset: %d, step: %d, channels: %d",(int)imCurr_g.offset,(int)imCurr_g.step,elemSize_g);
     
     int i;
     i = k_OptFlow.set(0, cv::ocl::KernelArg::PtrReadOnly(imCurr_g));
     i = k_OptFlow.set(i, cv::ocl::KernelArg::ReadOnly(imPrev_g));
+    i = k_OptFlow.set(i, elemSize_g);
     i = k_OptFlow.set(i, cv::ocl::KernelArg::PtrReadOnly(foundPtsX_ord_g));
     i = k_OptFlow.set(i, cv::ocl::KernelArg::PtrReadOnly(foundPtsY_ord_g));
     i = k_OptFlow.set(i, exclusions_g);
@@ -506,7 +508,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
 
 
 
-  cv::Mat imShowCorn = cv::Mat(imCurr.size(),imCurr.type());
+  cv::Mat imShowCorn = cv::Mat(imCurr_g.size(),imCurr_g.type());
     if (!first){
     imShowCorn_g.copyTo(imShowCorn);
     }
@@ -530,7 +532,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
           averageY_g);
   }
 
-  imPrev = imCurr.clone();
+   imCurr_g.copyTo(imPrev_g);
 
   first = false;
   return outvec;
@@ -567,7 +569,7 @@ void SparseOptFlowOcl::drawOpticalFlow(
     cv::Mat& dst)
 {
   if (blankBG){
-    imView = cv::Mat(imCurr.size(),CV_8UC3); 
+    imView = cv::Mat(imView.size(),CV_8UC3); 
     imView = cv::Scalar(30);
   }
 

@@ -182,12 +182,11 @@ private:
       int key = -1;
       while (key != 13)
       {
-        imCurr = cv::Scalar(0);
+        imCurr = cv::Scalar(0,0,0);
         vc.read(imCurr_raw);
        // cv::imwrite(MaskPath.str().c_str(),imCurr_raw);
 
         imCurr_raw.copyTo(imCurr,mask);
-        cvtColor(imCurr, imCurr, CV_RGB2GRAY);
 
        bmm->processImage(
            imCurr,
@@ -265,7 +264,7 @@ private:
         //ROS_INFO("Here 2");
 
         //  Converting color
-        cv::cvtColor(imOrigScaled(frameRect),imCurr,CV_RGB2GRAY);
+//        cv::cvtColor(imOrigScaled(frameRect),imCurr,CV_RGB2GRAY);
         
     }
 

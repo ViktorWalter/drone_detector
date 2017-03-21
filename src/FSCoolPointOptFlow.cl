@@ -1,7 +1,18 @@
 #define i1__at(x,y) input_1[mad24(y,imgSrcStep,(imgSrcOffset + x))]
 #define i2__at(x,y) input_2[mad24(y,imgSrcStep,(imgSrcOffset + x))]
+
+#define i1_cn_at(x,y,cn) input_1[mad24(y,imgSrcStep,(imgSrcOffset+mad24(x,3,cn)))]
+#define i2_cn_at(x,y,cn) input_2[mad24(y,imgSrcStep,(imgSrcOffset+mad24(x,3,cn)))]
+
+#define i1_r_at(x,y) input_1[mad24(y,imgSrcStep,(imgSrcOffset+mad24(x,3,2)))]
+#define i1_g_at(x,y) input_1[mad24(y,imgSrcStep,(imgSrcOffset+mad24(x,3,1)))]
+#define i1_b_at(x,y) input_1[mad24(y,imgSrcStep,(imgSrcOffset+mad24(x,3,0)))]
+#define i2_r_at(x,y) input_2[mad24(y,imgSrcStep,(imgSrcOffset+mad24(x,3,2)))]
+#define i2_g_at(x,y) input_2[mad24(y,imgSrcStep,(imgSrcOffset+mad24(x,3,1)))]
+#define i2_b_at(x,y) input_2[mad24(y,imgSrcStep,(imgSrcOffset+mad24(x,3,0)))]
+
 #define arraySize 50
-#define MinValThreshold mul24(samplePointSize2,15)//*1*prevFoundNum[currLine])
+#define MinValThreshold mul24(samplePointSize2,45)//*1*prevFoundNum[currLine])
 //#define MaxAbsDiffThreshold mul24(samplePointSize2,10)
 #define FastThresh 40
 #define CornerArraySize 10
@@ -9,7 +20,7 @@
 #define shiftRadius 1
 #define maxDistMultiplier 1.5
 #define threadsPerCornerPoint 32
-#define distanceWeight 0.03
+#define distanceWeight 0.09
 #define excludedPoint -1
 #define minPointsThreshold 4
 //#define addSelf 
@@ -181,6 +192,7 @@ __kernel void CornerPoints(
 __kernel void OptFlowReduced(
     __constant unsigned char* input_1,
     __constant unsigned char* input_2, int imgSrcStep, int imgSrcOffset, int imgSrcHeight, int imgSrcWidth,
+    int elemSize,
     __constant ushort* foundPtsX,
     __constant ushort* foundPtsY,
     __constant bool* exclusions,
@@ -336,13 +348,22 @@ __kernel void OptFlowReduced(
         int i = indexPixel % samplePointSize;
         int j = indexPixel / samplePointSize;
         if ((i<samplePointSize) && (j<samplePointSize))
-          atomic_add(&(abssum[indexLocal]),
-              abs_diff(
-                i1__at(posX+i+corner,posY+j+corner)
-                ,
-                i2__at(posX_prev+i+corner,posY_prev+j+corner)
-                )
-              );
+          if (elemSize == 1)
+            atomic_add(&(abssum[indexLocal]),
+                abs_diff(
+                  i1__at(posX+i+corner,posY+j+corner)
+                  ,
+                  i2__at(posX_prev+i+corner,posY_prev+j+corner)
+                  )
+                );
+            for (int cn=0;cn<3;cn++)
+              atomic_add(&(abssum[indexLocal]),
+                abs_diff(
+                  i1_cn_at(posX+i+corner,posY+j+corner,cn)
+                  ,
+                  i2_cn_at(posX_prev+i+corner,posY_prev+j+corner,cn)
+                  )
+                );
       }
     }
   }

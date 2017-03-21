@@ -3,7 +3,7 @@
 #define arraySize 50
 #define MinValThreshold mul24(samplePointSize2,15)//*1*prevFoundNum[currLine])
 //#define MaxAbsDiffThreshold mul24(samplePointSize2,10)
-#define FastThresh 30
+#define FastThresh 40
 #define CornerArraySize 10
 #define maxNumOfBlocks 2000
 #define shiftRadius 1
@@ -13,7 +13,7 @@
 #define excludedPoint -1
 #define minPointsThreshold 4
 //#define addSelf 
-//#define allPoints
+#define allPoints
 #define alphaWeight 05.0
 #define alphaDiffClose 0.25
 #define lenWeight 0.5
@@ -136,11 +136,14 @@ __kernel void CornerPoints(
             }
           }
           if ( (cadj + cadj_b) >= 12) {
+            barrier(CLK_LOCAL_MEM_FENCE);
 
-            atomic_cmpxchg(&occupiedField[threadY][threadX],0,1);
-            
-            atomic_cmpxchg(&occupiedField[threadY][threadY],atomic_cmpxchg(&occupiedField[threadY][threadX+1],1,0),1);
-            atomic_cmpxchg(&occupiedField[threadY][threadY],atomic_cmpxchg(&occupiedField[threadY+1][threadX],1,0),1);
+//            atomic_xchg(&occupiedField[threadY][threadX],0);
+            occupiedField[threadY][threadX] = 1;
+            atomic_xchg(&occupiedField[threadY][threadX+1],0);
+            atomic_xchg(&occupiedField[threadY+1][threadX],0);
+//            atomic_cmpxchg(&occupiedField[threadY][threadX],atomic_cmpxchg(&occupiedField[threadY][threadX+1],1,0),1);
+//            atomic_cmpxchg(&occupiedField[threadY][threadX],atomic_cmpxchg(&occupiedField[threadY+1][threadX],1,0),1);
 
             indexLocal = atomic_inc(&(numFoundBlock[mad24(blockY,blockNumX,blockX)]));
             indexGlobal = atomic_inc(&(foundPtsSize[0]));

@@ -1,8 +1,8 @@
 #define i1__at(x,y) input_1[mad24(y,imgSrcStep,(imgSrcOffset + x))]
 #define i2__at(x,y) input_2[mad24(y,imgSrcStep,(imgSrcOffset + x))]
 
-#define i1_cn_at(x,y,cn) input_1[mad24(y,imgSrcStep,(imgSrcOffset+mad24(x,3,cn)))]
-#define i2_cn_at(x,y,cn) input_2[mad24(y,imgSrcStep,(imgSrcOffset+mad24(x,3,cn)))]
+#define i1_cn_at(x,y,cn) input_1[mad24(y,imgSrcStep,(imgSrcOffset+mad24(x,elemSize,cn)))]
+#define i2_cn_at(x,y,cn) input_2[mad24(y,imgSrcStep,(imgSrcOffset+mad24(x,elemSize,cn)))]
 
 #define i1_r_at(x,y) input_1[mad24(y,imgSrcStep,(imgSrcOffset+mad24(x,3,2)))]
 #define i1_g_at(x,y) input_1[mad24(y,imgSrcStep,(imgSrcOffset+mad24(x,3,1)))]
@@ -12,7 +12,7 @@
 #define i2_b_at(x,y) input_2[mad24(y,imgSrcStep,(imgSrcOffset+mad24(x,3,0)))]
 
 #define arraySize 50
-#define MinValThreshold mul24(samplePointSize2,45)//*1*prevFoundNum[currLine])
+#define MinValThreshold mul24(samplePointSize2,mul24(elemSize,20))//*1*prevFoundNum[currLine])
 //#define MaxAbsDiffThreshold mul24(samplePointSize2,10)
 #define FastThresh 40
 #define CornerArraySize 10
@@ -20,10 +20,10 @@
 #define shiftRadius 1
 #define maxDistMultiplier 1.5
 #define threadsPerCornerPoint 32
-#define distanceWeight 0.09
+#define distanceWeight (0.03*elemSize)
 #define excludedPoint -1
 #define minPointsThreshold 4
-//#define addSelf 
+#define addSelf 
 #define allPoints
 #define alphaWeight 05.0
 #define alphaDiffClose 0.25
@@ -327,7 +327,8 @@ __kernel void OptFlowReduced(
 
 
   int repetitionsOverCorners = (pointsHeld/threadNumX)+1;
-  int repetitionsOverPixels = (samplePointSize2/threadNumY)+1;
+  int repetitionsOverPixels = (mul24(elemSize,samplePointSize2)/threadNumY)+1;
+  int spsChannels = mul24(elemSize,samplePointSize);
   barrier(CLK_LOCAL_MEM_FENCE);
   //Next, Check each of them for match
   for (int n = 0; n < repetitionsOverCorners; n++) {
@@ -344,26 +345,24 @@ __kernel void OptFlowReduced(
         atomic_add(&abssum[indexLocal],distPenalty);
       }
       for (int m=0;m<repetitionsOverPixels;m++) {
-        int indexPixel = mad24(n,threadNumY,threadY);
-        int i = indexPixel % samplePointSize;
-        int j = indexPixel / samplePointSize;
-        if ((i<samplePointSize) && (j<samplePointSize))
-          if (elemSize == 1)
+        int indexPixel = mad24(m,threadNumY,threadY);
+        int i = indexPixel % spsChannels;
+        int j = indexPixel / spsChannels;
+        if ((i<spsChannels) && (j<samplePointSize))
             atomic_add(&(abssum[indexLocal]),
                 abs_diff(
-                  i1__at(posX+i+corner,posY+j+corner)
+                  i1__at(mul24(elemSize,posX+corner)+i,posY+j+corner)
                   ,
-                  i2__at(posX_prev+i+corner,posY_prev+j+corner)
+                  i2__at(mul24(elemSize,posX_prev+corner)+i,posY_prev+j+corner)
                   )
                 );
-            for (int cn=0;cn<3;cn++)
-              atomic_add(&(abssum[indexLocal]),
-                abs_diff(
-                  i1_cn_at(posX+i+corner,posY+j+corner,cn)
-                  ,
-                  i2_cn_at(posX_prev+i+corner,posY_prev+j+corner,cn)
-                  )
-                );
+//              atomic_add(&(abssum[indexLocal]),
+//                abs_diff(
+//                  i1_cn_at(posX+i+corner,posY+j+corner,cn)
+//                  ,
+//                  i2_cn_at(posX_prev+i+corner,posY_prev+j+corner,cn)
+//                  )
+//                );
       }
     }
   }
@@ -465,7 +464,7 @@ __kernel void OptFlowReduced(
 
 
 __kernel void BordersSurround(
-    __global short* outA,
+    __global ushort* outA,
     __global short* prevA,
     __global short* outB,
     __global short* outC,

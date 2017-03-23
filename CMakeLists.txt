@@ -112,7 +112,7 @@ add_executable(drone_detector_node src/drone_detector.cpp)
 add_dependencies(drone_detector_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 add_custom_target(headers SOURCES ${HEADER_FILES} ${OPENCL_FILES} ${LAUNCHER_FILES} ${YAML_FILES})
-configure_file(src/FastSpacedBMMethod.cl ${CATKIN_DEVEL_PREFIX}/${CATKIN_PACKAGE_BIN_DESTINATION}/FastSpacedBMMethod.cl COPYONLY)
+##configure_file(src/FSCoolPointOptFlow.cl ${CATKIN_DEVEL_PREFIX}/${CATKIN_PACKAGE_BIN_DESTINATION}/FSCoolPointOptFlow.cl COPYONLY)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(drone_detector_node

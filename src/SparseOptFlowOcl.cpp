@@ -8,7 +8,7 @@
 #define maxCornersPerBlock 96
 #define invalidFlow -5555
 #define enableBlankBG false
-#define maxPassedPoints 4000
+#define maxPassedPoints 2000
 
 cv::Mat ResizeToFitRectangle(cv::Mat& src, cv::Size size) {
   if ((src.cols <= size.width) && (src.rows <= size.height))
@@ -247,7 +247,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     foundPointsY_prev_g = cv::Scalar(0);
     foundPointsX_g = cv::Scalar(0);
     foundPointsY_g = cv::Scalar(0);
-    activationMap_g = cv::UMat(cv::Size(gridC[0],gridC[1]),CV_16SC1);
+    activationMap_g = cv::UMat(cv::Size(gridC[0],gridC[1]),CV_16UC1);
     activationMap_prev_g = cv::UMat(cv::Size(gridC[0],gridC[1]),CV_16SC1);
     averageX_g = cv::UMat(cv::Size(gridC[0],gridC[1]),CV_16SC1);
     averageY_g = cv::UMat(cv::Size(gridC[0],gridC[1]),CV_16SC1);
@@ -400,7 +400,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     int divider = EfficientWGSize;
     std::size_t blockB[3] = {max_wg_size/divider,divider,1};
     std::size_t gridB[3] = {foundPtsSize,1,1};
-    std::size_t globalB[3] = {gridB[0]*blockB[0],1,1};
+    std::size_t globalB[3] = {gridB[0]*blockB[0],gridB[1]*blockB[1],1};
 
     int blockA_g = blockA[0];
     int gridA_width_g = gridA[0];
@@ -490,6 +490,11 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     ROS_INFO("BordersSurround took %f seconds",elapsed_secs);
     
   }     
+
+//  cv::Mat scaledActMap;
+//  activationMap_g.convertTo(scaledActMap,CV_8UC1);
+//  cv::resize(scaledActMap*10, scaledActMap, imView.size(),0,0,cv::INTER_NEAREST);
+//  cv::imshow("Activation", scaledActMap);
 
   clEnqueueCopyBuffer(
       cqu,

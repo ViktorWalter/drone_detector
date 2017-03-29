@@ -8,6 +8,12 @@
 #include <opencv2/core/ocl.hpp>
 #include <CL/cl.hpp>
 
+struct AttentionWindow {
+  cv::Rect rect;
+  cv::Size2i sizeInCells;
+  float Activation;
+  std::pair<double,double> direction;
+};
 
 class SparseOptFlowOcl
 {
@@ -76,6 +82,14 @@ private:
 
     cv::Size monitorSize;
 
+    static bool sortWindows(AttentionWindow a, AttentionWindow b)
+    {
+      if (a.Activation == b.Activation)
+        return a.sizeInCells.width < b.sizeInCells.width;
+      else
+        return a.Activation > b.Activation;
+    }
+
 public:
     SparseOptFlowOcl(int i_samplePointSize,
                                          int i_scanRadius,
@@ -100,6 +114,12 @@ public:
 
 
 private:
+    std::vector<AttentionWindow> findWindows(
+        cv::Mat activation,
+        cv::Mat flowX,
+        cv::Mat flowY,
+        int minWindowSize = 1,
+        int maxWindowSize = 3);
     void showFlow(
         const cv::UMat posx,
         const cv::UMat posy,
@@ -108,8 +128,9 @@ private:
         bool blankBG,
         const cv::UMat actMap,
         const cv::UMat avgX,
-        const cv::UMat avgY
-        );
+        const cv::UMat avgY,
+        const std::vector<AttentionWindow> wnds
+      );
     void drawOpticalFlow(
         const cv::Mat_<ushort>& posx,
         const cv::Mat_<ushort>& posy,
@@ -122,6 +143,7 @@ private:
         const cv::Mat_<short>& avgX,
         const cv::Mat_<short>& avgY
         );
+    void drawWindows(std::vector<AttentionWindow> wnds);
 
 
 

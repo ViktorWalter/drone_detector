@@ -9,6 +9,10 @@
 #define invalidFlow -5555
 #define enableBlankBG false
 #define maxPassedPoints 2000
+#define maxConsideredWindows 4 
+#define windowAvgMin 10
+#define windowExtendedShell 20
+
 
 cv::Mat ResizeToFitRectangle(cv::Mat& src, cv::Size size) {
   if ((src.cols <= size.width) && (src.rows <= size.height))
@@ -511,6 +515,16 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   foundPointsY_g.copyTo(foundPointsY_prev_g);
   activationMap_g.copyTo(activationMap_prev_g);
 
+  ROS_INFO("here");
+  std::vector<AttentionWindow> wnds =
+    findWindows(
+        activationMap_g.getMat(cv::ACCESS_READ),
+        averageX_g.getMat(cv::ACCESS_READ),
+        averageY_g.getMat(cv::ACCESS_READ)
+        );
+
+
+
 
 
   cv::Mat imShowCorn = cv::Mat(imCurr_g.size(),imCurr_g.type());
@@ -534,7 +548,8 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
           enableBlankBG,
           activationMap_g,
           averageX_g,
-          averageY_g);
+          averageY_g,
+          wnds);
   }
 
    imCurr_g.copyTo(imPrev_g);
@@ -544,6 +559,60 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
 
 }
 
+std::vector<AttentionWindow> SparseOptFlowOcl::findWindows(
+    cv::Mat activation,
+    cv::Mat flowX,
+    cv::Mat flowY,
+    int minWindowSize,
+    int maxWindowSize)
+{
+  std::vector<AttentionWindow> windows;
+  int d = cellSize - cellOverlay;
+  for (int i = minWindowSize; i<=maxWindowSize; i++){
+    for (int y  = 0; y<=activation.size().height-i;y++)
+      for (int x  = 0; x<=activation.size().width-i;x++){
+        float Act=0;
+        float dirX=0;
+        float dirY=0;
+        for (int b = 0; b<i; b++)
+          for (int a = 0; a<i; a++){
+            Act += activation.at<ushort>(y+b,x+a);
+            dirX += flowX.at<short>(y+b,x+a);
+            dirX += flowY.at<short>(y+b,x+a);
+          }
+        //Act = Act/(i*i);
+        dirX = dirX/(i*i);
+        dirY = dirY/(i*i);
+        if (Act > windowAvgMin){
+          AttentionWindow wnd;
+          wnd.sizeInCells = cv::Size(i,i);
+          wnd.rect = cv::Rect2i(d*x+windowExtendedShell,d*y+windowExtendedShell,d*i+windowExtendedShell,d*i+windowExtendedShell);
+          wnd.direction = std::make_pair((float)dirX,(float)dirY);
+          wnd.Activation = Act;
+          windows.push_back(wnd);
+        }
+      }
+  }
+
+  std::sort(windows.begin(),windows.end(),sortWindows);
+  bool sorted = false;
+  while (!sorted){
+    sorted = true;
+    for (int i = 0; i<windows.size(); i++){
+      cv::Rect2i intersect = (windows[i].rect & windows[i+1].rect);
+      if (intersect.area() > 0){
+        windows.erase(windows.begin()+i);
+        i--;
+        sorted = false;
+      }
+    }
+  }
+
+  return windows;
+
+}
+
+
 void SparseOptFlowOcl::showFlow(
     const cv::UMat posx,
     const cv::UMat posy,
@@ -552,12 +621,14 @@ void SparseOptFlowOcl::showFlow(
     bool blankBG,
     const cv::UMat actMap,
     const cv::UMat avgX,
-    const cv::UMat avgY)
+    const cv::UMat avgY,
+    const std::vector<AttentionWindow> wnds)
 {
   cv::Mat out;
 
   drawOpticalFlow(posx.getMat(cv::ACCESS_READ), posy.getMat(cv::ACCESS_READ), flowx.getMat(cv::ACCESS_READ), flowy.getMat(cv::ACCESS_READ), blankBG, out );
   drawActivation(actMap.getMat(cv::ACCESS_READ),avgX.getMat(cv::ACCESS_READ),avgY.getMat(cv::ACCESS_READ));
+  drawWindows(wnds);
 
   imView = ResizeToFitRectangle(imView,monitorSize);
   cv::imshow("Main", imView);
@@ -659,6 +730,16 @@ void SparseOptFlowOcl::drawActivation(
       
     }
     
+  }
+}
+
+void SparseOptFlowOcl::drawWindows(std::vector<AttentionWindow> wnds)
+{
+  for (int i=0; i<(maxConsideredWindows < wnds.size(),maxConsideredWindows,wnds.size()); i++){
+    cv::Rect rect = wnds[i].rect;
+    cv::Point2i corner1 = cv::Point2i(rect.x,rect.y);
+    cv::Point2i corner2 = cv::Point2i(rect.x+rect.width,rect.y+rect.height);
+    cv::rectangle(imView, corner1,corner2, cv::Scalar(255,0,0), 2);
   }
 }
 

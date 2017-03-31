@@ -515,7 +515,6 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   foundPointsY_g.copyTo(foundPointsY_prev_g);
   activationMap_g.copyTo(activationMap_prev_g);
 
-  ROS_INFO("here");
   std::vector<AttentionWindow> wnds =
     findWindows(
         activationMap_g.getMat(cv::ACCESS_READ),
@@ -567,47 +566,49 @@ std::vector<AttentionWindow> SparseOptFlowOcl::findWindows(
     int maxWindowSize)
 {
   std::vector<AttentionWindow> windows;
+  cv::SimpleBlobDetector::Params params;
+  params.minThreshold = 200;
+  params.maxThreshold = 255;
+  params.thresholdStep = 5;
+  params.filterByArea = true;
+  params.minArea = 1;
+  params.maxArea = 20;
+  params.filterByCircularity = false;
+  params.filterByConvexity = false;
+  params.filterByColor = false;
+  params.filterByInertia = false;
+  cv::Ptr<cv::SimpleBlobDetector> detector = cv::SimpleBlobDetector::create(params);
+  std::vector<cv::KeyPoint> keypoints;
+  cv::Mat activation_conv;
+  cv::Mat showpts = cv::Mat(activation.size(),CV_8UC1);
+  showpts = cv::Scalar(255,255,255);
+  activation.convertTo(activation_conv,CV_8UC1);
+  activation_conv = showpts - activation_conv;
+  detector->detect(activation_conv,keypoints);
+//  cv::drawKeypoints(showpts,keypoints,showpts,cv::Scalar(0,255,0),cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+ // cv::imshow("cv_act",activation_conv);
+//  cv::imshow("cv_fl_blob",showpts);
+//  if (keypoints.size() > 0){
+//    ROS_INFO("keypoints: %d", keypoints.size());
+//    cv::waitKey(0);
+//  }
+//  return windows;
+
   int d = cellSize - cellOverlay;
-  for (int i = minWindowSize; i<=maxWindowSize; i++){
-    for (int y  = 0; y<=activation.size().height-i;y++)
-      for (int x  = 0; x<=activation.size().width-i;x++){
-        float Act=0;
-        float dirX=0;
-        float dirY=0;
-        for (int b = 0; b<i; b++)
-          for (int a = 0; a<i; a++){
-            Act += activation.at<ushort>(y+b,x+a);
-            dirX += flowX.at<short>(y+b,x+a);
-            dirX += flowY.at<short>(y+b,x+a);
-          }
-        //Act = Act/(i*i);
-        dirX = dirX/(i*i);
-        dirY = dirY/(i*i);
-        if (Act > windowAvgMin){
+  for (int i = 0; i<keypoints.size(); i++){
           AttentionWindow wnd;
-          wnd.sizeInCells = cv::Size(i,i);
-          wnd.rect = cv::Rect2i(d*x+windowExtendedShell,d*y+windowExtendedShell,d*i+windowExtendedShell,d*i+windowExtendedShell);
+          double sz = keypoints[i].size;
+          int x  = keypoints[i].pt.x;
+          int y  = keypoints[i].pt.y;
+          int dirX = flowX.at<short>(y,x);
+          int dirY = flowY.at<short>(y,x);
+          int Act = (int)keypoints[i].response;
+          wnd.sizeInCells = cv::Size((int)sz,(int)sz);
+          wnd.rect = cv::Rect2i(d*(x-sz*0.5+0.5)+windowExtendedShell+dirX,d*(y-sz*0.5+0.5)+windowExtendedShell+dirY,d*(sz)+windowExtendedShell,d*(sz)+windowExtendedShell);
           wnd.direction = std::make_pair((float)dirX,(float)dirY);
           wnd.Activation = Act;
           windows.push_back(wnd);
-        }
-      }
   }
-
-  std::sort(windows.begin(),windows.end(),sortWindows);
-  bool sorted = false;
-  while (!sorted){
-    sorted = true;
-    for (int i = 0; i<windows.size(); i++){
-      cv::Rect2i intersect = (windows[i].rect & windows[i+1].rect);
-      if (intersect.area() > 0){
-        windows.erase(windows.begin()+i);
-        i--;
-        sorted = false;
-      }
-    }
-  }
-
   return windows;
 
 }
@@ -631,7 +632,7 @@ void SparseOptFlowOcl::showFlow(
   drawWindows(wnds);
 
   imView = ResizeToFitRectangle(imView,monitorSize);
-  cv::imshow("Main", imView);
+  cv::imshow("cv_Main", imView);
   if (storeVideo)
     outputVideo << out;
 }
@@ -735,11 +736,14 @@ void SparseOptFlowOcl::drawActivation(
 
 void SparseOptFlowOcl::drawWindows(std::vector<AttentionWindow> wnds)
 {
-  for (int i=0; i<(maxConsideredWindows < wnds.size(),maxConsideredWindows,wnds.size()); i++){
+  for (int i=0; i< wnds.size();i++){
     cv::Rect rect = wnds[i].rect;
     cv::Point2i corner1 = cv::Point2i(rect.x,rect.y);
     cv::Point2i corner2 = cv::Point2i(rect.x+rect.width,rect.y+rect.height);
     cv::rectangle(imView, corner1,corner2, cv::Scalar(255,0,0), 2);
+    char wndname[10];
+    std::sprintf(wndname,"cv_fl_%d",i);
+    cv::imshow(wndname, imCurr_g(wnds[i].rect));
   }
 }
 

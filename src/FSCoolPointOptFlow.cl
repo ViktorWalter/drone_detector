@@ -61,6 +61,14 @@ __kernel void CornerPoints(
   __local int occupiedField[arraySize][arraySize];
   occupiedField[threadY][threadX] = 0;
 
+//if ((blockX == 0) && (blockY == 0) && (threadX == 0) && (threadY == 0))
+//  printf("step: %d, offset: %d, height: %d, width: %d",imgSrcStep,imgSrcOffset,imgSrcHeight,imgSrcWidth);
+
+//int  px = mad24(blockX,blockSize,threadX);
+//int  py = mad24(blockY,blockSize,threadY);
+//      output_view[mad24(py,imgSrcStep,px)] = 255;
+//      return;
+
   barrier(CLK_LOCAL_MEM_FENCE);
 
   for (int m=0; m<repetitions; m++)
@@ -70,19 +78,25 @@ __kernel void CornerPoints(
       int i = mad24(n,blockSize,threadX);
       int j = mad24(m,blockSize,threadY);
       int x = mad24(blockX,blockSize,i);
-      int y = mad24(blockY,blockSize,i);
+      int y = mad24(blockY,blockSize,j);
       //if ((i>=3)&&(i<=maxij)&&(j>=3)&&(j<=maxij))
-      if ((x>=3)&&(x<=imgSrcStep-3)&&(y>=3)&&(y<=imgSrcStep-3))
+      
+
+
+
+      int cadj = 0;
+      int cadj_b = 0;
+      if ((x>=3)&&(x<imgSrcWidth-3)&&(y>=3)&&(y<imgSrcHeight-3))
       {
         uchar I[17];
         I[0] = i1__at(mad24(blockX,(blockSize),i),mad24(blockY,(blockSize),j));
         I[1] = i1__at(mad24(blockX,(blockSize),i),mad24(blockY,(blockSize),(j-3)));
         I[9] = i1__at(mad24(blockX,(blockSize),i),mad24(blockY,(blockSize),(j+3)));
 
-        if (((I[1]>(I[0]-FastThresh)) && (I[1]<(I[0]+FastThresh)))
-            &&
-            ((I[9]>(I[0]-FastThresh)) && (I[9]<(I[0]+FastThresh))))
-          return;
+        if (((I[1]<(I[0]-FastThresh)) || (I[1]>(I[0]+FastThresh)))
+            ||
+            ((I[9]<(I[0]-FastThresh)) || (I[9]>(I[0]+FastThresh))))
+        {
         I[5] = i1__at(mad24(blockX,(blockSize),(i+3)),mad24(blockY,(blockSize),j));
         I[13] = i1__at(mad24(blockX,(blockSize),(i-3)),mad24(blockY,(blockSize),j));
         char l=
@@ -92,95 +106,92 @@ __kernel void CornerPoints(
           (I[1]<(I[0]-FastThresh))+(I[9]<(I[0]-FastThresh))+
           (I[5]<(I[0]-FastThresh))+(I[13]<(I[0]-FastThresh));
 
-//          foundPtsSize[0] =blockNumY;
-//          return;
 
 #ifdef allPoints
         if ( (l>=3) || (h>=3) )
 #else
-        if ( (l>3) || (h>3) )
+          if ( (l>3) || (h>3) )
 #endif
-        {
-          char sg = (l >=3)?-1:1;
-          I[2] = i1__at(mad24(blockX,(blockSize),(i+1)),mad24(blockY,(blockSize),(j-3)));
-          I[3] = i1__at(mad24(blockX,(blockSize),(i+2)),mad24(blockY,(blockSize),(j-2)));
-          I[4] = i1__at(mad24(blockX,(blockSize),(i+3)),mad24(blockY,(blockSize),(j-1)));
-          I[6] = i1__at(mad24(blockX,(blockSize),(i+3)),mad24(blockY,(blockSize),(j+1)));
-          I[7] = i1__at(mad24(blockX,(blockSize),(i+2)),mad24(blockY,(blockSize),(j+2)));
-          I[8] = i1__at(mad24(blockX,(blockSize),(i+1)),mad24(blockY,(blockSize),(j+3)));
-          I[10] = i1__at(mad24(blockX,(blockSize),(i-1)),mad24(blockY,(blockSize),(j+3)));
-          I[11] = i1__at(mad24(blockX,(blockSize),(i-2)),mad24(blockY,(blockSize),(j+2)));
-          I[12] = i1__at(mad24(blockX,(blockSize),(i-3)),mad24(blockY,(blockSize),(j+1)));
-          I[14] = i1__at(mad24(blockX,(blockSize),(i-3)),mad24(blockY,(blockSize),(j-1)));
-          I[15] = i1__at(mad24(blockX,(blockSize),(i-2)),mad24(blockY,(blockSize),(j-2)));
-          I[16] = i1__at(mad24(blockX,(blockSize),(i-1)),mad24(blockY,(blockSize),(j-3)));
-          int cadj = 0;
-          int cadj_b = 0;
-          for (int pix = 1; pix < 16; pix++) {
-            if (sg == 1) {
-              if (I[pix]<(I[0]-FastThresh)) {
-                cadj++; 
-                if (cadj == 12) {
-                  break;
+          {
+            char sg = (l >=3)?-1:1;
+            I[2] = i1__at(mad24(blockX,(blockSize),(i+1)),mad24(blockY,(blockSize),(j-3)));
+            I[3] = i1__at(mad24(blockX,(blockSize),(i+2)),mad24(blockY,(blockSize),(j-2)));
+            I[4] = i1__at(mad24(blockX,(blockSize),(i+3)),mad24(blockY,(blockSize),(j-1)));
+            I[6] = i1__at(mad24(blockX,(blockSize),(i+3)),mad24(blockY,(blockSize),(j+1)));
+            I[7] = i1__at(mad24(blockX,(blockSize),(i+2)),mad24(blockY,(blockSize),(j+2)));
+            I[8] = i1__at(mad24(blockX,(blockSize),(i+1)),mad24(blockY,(blockSize),(j+3)));
+            I[10] = i1__at(mad24(blockX,(blockSize),(i-1)),mad24(blockY,(blockSize),(j+3)));
+            I[11] = i1__at(mad24(blockX,(blockSize),(i-2)),mad24(blockY,(blockSize),(j+2)));
+            I[12] = i1__at(mad24(blockX,(blockSize),(i-3)),mad24(blockY,(blockSize),(j+1)));
+            I[14] = i1__at(mad24(blockX,(blockSize),(i-3)),mad24(blockY,(blockSize),(j-1)));
+            I[15] = i1__at(mad24(blockX,(blockSize),(i-2)),mad24(blockY,(blockSize),(j-2)));
+            I[16] = i1__at(mad24(blockX,(blockSize),(i-1)),mad24(blockY,(blockSize),(j-3)));
+            for (int pix = 1; pix < 16; pix++) {
+              if (sg == 1) {
+                if (I[pix]<(I[0]-FastThresh)) {
+                  cadj++; 
+                  if (cadj == 12) {
+                    break;
+                  }
+                }
+                else {
+                  if (cadj == pix-1) {
+                    cadj_b = cadj; 
+                  }
+                  cadj = 0;
                 }
               }
               else {
-                if (cadj == pix-1) {
-                  cadj_b = cadj; 
+                if (I[pix]>(I[0]+FastThresh)) {
+                  cadj++; 
+                  if (cadj == 12) {
+                    break;
+                  }
                 }
-                cadj = 0;
-              }
-            }
-            else {
-              if (I[pix]>(I[0]+FastThresh)) {
-                cadj++; 
-                if (cadj == 12) {
-                  break;
+                else {
+                  if (cadj == pix-1) {
+                    cadj_b = cadj; 
+                  }
+                  cadj = 0;
                 }
-              }
-              else {
-                if (cadj == pix-1) {
-                  cadj_b = cadj; 
-                }
-                cadj = 0;
               }
             }
           }
-          if ( (cadj + cadj_b) >= 12) {
-            barrier(CLK_LOCAL_MEM_FENCE);
-
-//            atomic_xchg(&occupiedField[threadY][threadX],0);
-            occupiedField[threadY][threadX] = 1;
-            atomic_xchg(&occupiedField[threadY][threadX+1],0);
-            atomic_xchg(&occupiedField[threadY+1][threadX],0);
-//            atomic_cmpxchg(&occupiedField[threadY][threadX],atomic_cmpxchg(&occupiedField[threadY][threadX+1],1,0),1);
-//            atomic_cmpxchg(&occupiedField[threadY][threadX],atomic_cmpxchg(&occupiedField[threadY+1][threadX],1,0),1);
-
-            indexLocal = atomic_inc(&(numFoundBlock[mad24(blockY,blockNumX,blockX)]));
-            indexGlobal = atomic_inc(&(foundPtsSize[0]));
-
-            if (indexLocal <= maxCornersPerBlock)
-            {
-              output_view[
-                mad24(mad24(blockY,(blockSize),j),showCornStep,mad24(blockX,blockSize,i+showCornOffset)) ] =
-                  30;
-              foundPointsX[mad24(mad24(blockY,blockNumX,blockX),foundPointsStep2,indexLocal)]=
-                mad24(blockX,blockSize,i);
-              foundPointsY[mad24(mad24(blockY,blockNumX,blockX),foundPointsStep2,indexLocal)]=
-                mad24(blockY,blockSize,j);
-            }
-            if (occupiedField[threadY][threadX] == 1){
-              foundPtsX_ord[indexGlobal] =
-                mad24(blockX,blockSize,i);
-              foundPtsY_ord[indexGlobal] =
-                mad24(blockY,blockSize,j);
-            }
-          }
-
-
         }
       }
+
+      barrier(CLK_LOCAL_MEM_FENCE);
+
+      if ( (cadj + cadj_b) >= 12) {
+        occupiedField[threadY][threadX] = 1;
+        atomic_xchg(&occupiedField[threadY][threadX+1],0);
+        atomic_xchg(&occupiedField[threadY+1][threadX],0);
+      }
+
+      barrier(CLK_LOCAL_MEM_FENCE);
+
+      indexLocal = atomic_inc(&(numFoundBlock[mad24(blockY,blockNumX,blockX)]));
+      indexGlobal = atomic_inc(&(foundPtsSize[0]));
+
+      if ((occupiedField[threadY][threadX] == 1)&&(indexLocal <= maxCornersPerBlock))
+      {
+        output_view[
+          mad24(mad24(blockY,(blockSize),j),showCornStep,mad24(blockX,blockSize,i+showCornOffset)) ] =
+            100;
+        foundPointsX[mad24(mad24(blockY,blockNumX,blockX),foundPointsStep2,indexLocal)]=
+          mad24(blockX,blockSize,i);
+        foundPointsY[mad24(mad24(blockY,blockNumX,blockX),foundPointsStep2,indexLocal)]=
+          mad24(blockY,blockSize,j);
+      }
+      if (occupiedField[threadY][threadX] == 1){
+        foundPtsX_ord[indexGlobal] =
+          mad24(blockX,blockSize,i);
+        foundPtsY_ord[indexGlobal] =
+          mad24(blockY,blockSize,j);
+      }
     }
+
+
   barrier(CLK_LOCAL_MEM_FENCE);
   if (indexLocal >= maxCornersPerBlock){
     numFoundBlock[mad24(blockY,blockNumX,blockX)] = maxCornersPerBlock;
@@ -331,7 +342,7 @@ __kernel void OptFlowReduced(
   int spsChannels = mul24(elemSize,samplePointSize);
   barrier(CLK_LOCAL_MEM_FENCE);
   //Next, Check each of them for match
-  for (int n = 0; n < repetitionsOverCorners; n++) {
+  for (int n = 0; n < repetitionsOverCorners-1; n++) {
     int indexLocal = mad24(n,threadNumX,threadX);
       abssum[indexLocal] = 0;
       barrier(CLK_LOCAL_MEM_FENCE);
@@ -344,7 +355,7 @@ __kernel void OptFlowReduced(
         int distPenalty = mul24(distanceWeightAbsolute,mad24(dx,dx,mul24(dy,dy)));
         atomic_add(&abssum[indexLocal],distPenalty);
       }
-      for (int m=0;m<repetitionsOverPixels;m++) {
+      for (int m=0;m<repetitionsOverPixels-1;m++) {
         int indexPixel = mad24(m,threadNumY,threadY);
         int i = indexPixel % spsChannels;
         int j = indexPixel / spsChannels;

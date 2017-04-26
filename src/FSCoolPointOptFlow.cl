@@ -70,7 +70,7 @@ __kernel void CornerPoints(
       int i = mad24(n,blockSize,threadX);
       int j = mad24(m,blockSize,threadY);
       int x = mad24(blockX,blockSize,i);
-      int y = mad24(blockY,blockSize,i);
+      int y = mad24(blockY,blockSize,j);
       //if ((i>=3)&&(i<=maxij)&&(j>=3)&&(j<=maxij))
       if ((x>=3)&&(x<=imgSrcStep-3)&&(y>=3)&&(y<=imgSrcStep-3))
       {

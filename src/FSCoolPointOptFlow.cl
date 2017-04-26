@@ -63,8 +63,8 @@ __kernel void CornerPoints(
 
   barrier(CLK_LOCAL_MEM_FENCE);
 
-  for (int m=0; m<repetitions; m++)
-    for (int n=0; n<repetitions; n++)
+  for (int m=1; m<=repetitions; m++)
+    for (int n=1; n<=repetitions; n++)
     {
 
       int i = mad24(n,blockSize,threadX);

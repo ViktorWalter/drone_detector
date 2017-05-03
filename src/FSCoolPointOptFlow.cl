@@ -159,43 +159,48 @@ __kernel void CornerPoints(
           }
         }
       }
-
-      barrier(CLK_LOCAL_MEM_FENCE);
-
       if ( (cadj + cadj_b) >= 12) {
         occupiedField[threadY][threadX] = 1;
+      }
+
+      if (occupiedField[threadY][threadX] == 1){
+        indexLocal = atomic_inc(&(numFoundBlock[mad24(blockY,blockNumX,blockX)]));
+        if (indexLocal < maxCornersPerBlock)
+        {
+          output_view[
+            mad24(mad24(blockY,(blockSize),j),showCornStep,mad24(blockX,blockSize,i+showCornOffset)) ] =
+              100;
+          foundPointsX[mad24(mad24(blockY,blockNumX,blockX),foundPointsStep2,indexLocal)]=
+            mad24(blockX,blockSize,i);
+          foundPointsY[mad24(mad24(blockY,blockNumX,blockX),foundPointsStep2,indexLocal)]=
+            mad24(blockY,blockSize,j);
+        }
+        else{
+          numFoundBlock[mad24(blockY,blockNumX,blockX)] = maxCornersPerBlock;
+        }
+
+      }
+      
+      barrier(CLK_LOCAL_MEM_FENCE);
+      if ( occupiedField[threadY][threadX] == 1){
         atomic_xchg(&occupiedField[threadY][threadX+1],0);
         atomic_xchg(&occupiedField[threadY+1][threadX],0);
+        atomic_xchg(&occupiedField[threadY+1][threadX+1],0);
       }
-
       barrier(CLK_LOCAL_MEM_FENCE);
 
-      indexLocal = atomic_inc(&(numFoundBlock[mad24(blockY,blockNumX,blockX)]));
-      indexGlobal = atomic_inc(&(foundPtsSize[0]));
-
-      if ((occupiedField[threadY][threadX] == 1)&&(indexLocal <= maxCornersPerBlock))
-      {
-        output_view[
-          mad24(mad24(blockY,(blockSize),j),showCornStep,mad24(blockX,blockSize,i+showCornOffset)) ] =
-            100;
-        foundPointsX[mad24(mad24(blockY,blockNumX,blockX),foundPointsStep2,indexLocal)]=
-          mad24(blockX,blockSize,i);
-        foundPointsY[mad24(mad24(blockY,blockNumX,blockX),foundPointsStep2,indexLocal)]=
-          mad24(blockY,blockSize,j);
-      }
       if (occupiedField[threadY][threadX] == 1){
+      indexGlobal = atomic_inc(&(foundPtsSize[0]));
         foundPtsX_ord[indexGlobal] =
           mad24(blockX,blockSize,i);
         foundPtsY_ord[indexGlobal] =
           mad24(blockY,blockSize,j);
       }
+
+
     }
 
 
-  barrier(CLK_LOCAL_MEM_FENCE);
-  if (indexLocal >= maxCornersPerBlock){
-    numFoundBlock[mad24(blockY,blockNumX,blockX)] = maxCornersPerBlock;
-  }
   return;
 }
 

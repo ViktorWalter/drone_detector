@@ -167,15 +167,16 @@ __kernel void CornerPoints(
         indexLocal = atomic_inc(&(numFoundBlock[mad24(blockY,blockNumX,blockX)]));
         if (indexLocal < maxCornersPerBlock)
         {
-          output_view[
-            mad24(mad24(blockY,(blockSize),j),showCornStep,mad24(blockX,blockSize,i+showCornOffset)) ] =
-              100;
+//          output_view[
+//            mad24(mad24(blockY,(blockSize),j),showCornStep,mad24(blockX,blockSize,i+showCornOffset)) ] =
+//              100;
           foundPointsX[mad24(mad24(blockY,blockNumX,blockX),foundPointsStep2,indexLocal)]=
             mad24(blockX,blockSize,i);
           foundPointsY[mad24(mad24(blockY,blockNumX,blockX),foundPointsStep2,indexLocal)]=
             mad24(blockY,blockSize,j);
         }
         else{
+         // printf("[overtop:blockX:%d,blockY:%d]\n",blockX,blockY);
           numFoundBlock[mad24(blockY,blockNumX,blockX)] = maxCornersPerBlock;
         }
 
@@ -191,6 +192,9 @@ __kernel void CornerPoints(
 
       if (occupiedField[threadY][threadX] == 1){
       indexGlobal = atomic_inc(&(foundPtsSize[0]));
+//          output_view[
+//            mad24(mad24(blockY,(blockSize),j),showCornStep,mad24(blockX,blockSize,i+showCornOffset)) ] =
+//              255;
         foundPtsX_ord[indexGlobal] =
           mad24(blockX,blockSize,i);
         foundPtsY_ord[indexGlobal] =
@@ -240,6 +244,8 @@ __kernel void OptFlowReduced(
   int corner = -samplePointSize/2;
   int posX = foundPtsX[block]; 
   int posY = foundPtsY[block]; 
+
+  int minI;
 
   __local int abssum[arraySize*arraySize];
   __local int Xpositions[arraySize*arraySize];
@@ -372,13 +378,6 @@ __kernel void OptFlowReduced(
                   i2__at(mul24(elemSize,posX_prev+corner)+i,posY_prev+j+corner)
                   )
                 );
-//              atomic_add(&(abssum[indexLocal]),
-//                abs_diff(
-//                  i1_cn_at(posX+i+corner,posY+j+corner,cn)
-//                  ,
-//                  i2_cn_at(posX_prev+i+corner,posY_prev+j+corner,cn)
-//                  )
-//                );
       }
     }
   }
@@ -392,7 +391,7 @@ __kernel void OptFlowReduced(
   {
 
     int minval = abssum[0];
-    int minI = 0; 
+    minI = 0; 
 
     for (int i=1;i<pointsHeld;i++)
     {
@@ -473,7 +472,10 @@ __kernel void OptFlowReduced(
 
     outputPosOrdX[block] = resX;
     outputPosOrdY[block] = resY;
+//  if (abs(posX-resX)>32)
+//    printf("[dist:%d, X:%d, Y:%d]",posX-resX,posX,posY);
   }
+
 
   return;
 }

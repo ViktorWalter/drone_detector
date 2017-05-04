@@ -41,6 +41,7 @@ public:
     {
         ros::NodeHandle private_node_handle("~");
 
+        private_node_handle.param("FromVideo", FromVideo, bool(true));
         private_node_handle.param("VideoNumber", VideoNumber, int(1));
       switch (VideoNumber) {
         case 1:
@@ -62,14 +63,23 @@ public:
       } 
       ROS_INFO("path = %s",VideoPath.str().c_str());
 
-      vc.open(VideoPath.str());
+      if (FromVideo){
+        vc.open(VideoPath.str());
+        vc.set(CV_CAP_PROP_POS_MSEC,(7*60+18)*1000);
+      }
+      else
+      {
+        vc.open(0);
+        vc.set(CV_CAP_PROP_FRAME_WIDTH,1280);
+        vc.set(CV_CAP_PROP_FRAME_HEIGHT,720);
+      }
+
       if (!vc.isOpened())
       {
         ROS_INFO("video failed to open");
       }
 
 //      cv::Mat testmat;
-      vc.set(CV_CAP_PROP_POS_MSEC,(7*60+18)*1000);
 
         private_node_handle.param("cellSize", cellSize, int(32));
         private_node_handle.param("cellOverlay", cellOverlay, int(8));
@@ -185,15 +195,19 @@ private:
         imCurr = cv::Scalar(0,0,0);
         vc.read(imCurr_raw);
        // cv::imwrite(MaskPath.str().c_str(),imCurr_raw);
+       
 
-        imCurr_raw.copyTo(imCurr,mask);
+        //imCurr_raw.copyTo(imCurr,mask);
+        imCurr_raw.copyTo(imCurr);
+        //cv::resize(imCurr_raw,imCurr,cv::Size(320,240));
+        //cv::imshow("vw",imCurr);
 
        bmm->processImage(
            imCurr,
-           imCurr_raw
+           imCurr
            );
 
-        key = cv::waitKey(10);
+        key = cv::waitKey(20);
       }
     }
 
@@ -274,6 +288,7 @@ private:
     std::stringstream VideoPath;
     std::stringstream MaskPath;
     int VideoNumber;
+    bool FromVideo;
 
     bool first;
 

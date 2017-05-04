@@ -30,6 +30,7 @@
 #define lenWeight 0.5
 #define trustMultiplierCount 0.15
 #define trustMultiplierMemory 0.85
+#define perFrame 0.5
 
 __kernel void CornerPoints(
     __global uchar* input_1, int imgSrcStep, int imgSrcOffset, int imgSrcHeight, int imgSrcWidth,
@@ -353,7 +354,7 @@ __kernel void OptFlowReduced(
   int spsChannels = mul24(elemSize,samplePointSize);
   barrier(CLK_LOCAL_MEM_FENCE);
   //Next, Check each of them for match
-  for (int n = 0; n < repetitionsOverCorners-1; n++) {
+  for (int n = 0; n < repetitionsOverCorners; n++) {
     int indexLocal = mad24(n,threadNumX,threadX);
       abssum[indexLocal] = 0;
       barrier(CLK_LOCAL_MEM_FENCE);
@@ -366,7 +367,7 @@ __kernel void OptFlowReduced(
         int distPenalty = mul24(distanceWeightAbsolute,mad24(dx,dx,mul24(dy,dy)));
         atomic_add(&abssum[indexLocal],distPenalty);
       }
-      for (int m=0;m<repetitionsOverPixels-1;m++) {
+      for (int m=0;m<repetitionsOverPixels;m++) {
         int indexPixel = mad24(m,threadNumY,threadY);
         int i = indexPixel % spsChannels;
         int j = indexPixel / spsChannels;
@@ -404,6 +405,9 @@ __kernel void OptFlowReduced(
 
     resX = Xpositions[minI];
     resY = Ypositions[minI];
+    
+    //if (minval == 0)
+    //  printf("\n zero diff: I:%d H:%d X:%d Y:%d",minI,pointsHeld,resX-posX,resY-posY);
 
     //    if ((resX > imgSrcWidth) || (resX < 0))
     //      return;
@@ -419,7 +423,7 @@ __kernel void OptFlowReduced(
 //      resX = invalidFlowVal;
 //      output_view[mad24(posY,showCornStep,posX+showCornOffset) ] = 100;
 //      }
-    if ( ((minval) >= MinValThreshold) && (true))  //if the value is great, then it is considered to be too noisy, blurred or with too great a shift
+    if ( ((minval) > MinValThreshold) && (true))  //if the value is great, then it is considered to be too noisy, blurred or with too great a shift
     {
       resY = invalidFlowVal;
       resX = invalidFlowVal;
@@ -491,7 +495,8 @@ __kernel void BordersSurround(
     __global int* inX,
     __global int* inY,
     __global int* inNum,
-    int inStep
+    int inStep,
+    float f
     )
 {
   int outStep2 = outStep/sizeof(short);
@@ -579,6 +584,8 @@ __kernel void BordersSurround(
 //      fmin(prevA[estimPrevCellIndex]*trustMultiplierMemory,2):
 //      0.0f);
   int activation = (int)(
+      (perFrame)*
+      (f)*
       (trustCount)*
       (alphaDiff>alphaDiffClose?
         (float)(alphaDiff*alphaWeight):

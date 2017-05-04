@@ -7,7 +7,7 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/core/ocl.hpp>
 #include <opencv2/features2d/features2d.hpp>
-#include <CL/cl.hpp>
+#include <CL/cl.h>
 
 struct AttentionWindow {
   cv::Rect rect;
@@ -76,6 +76,9 @@ private:
     double k1,k2,k3,p1,p2;
     bool storeVideo;
     cl_int *emptyCellGrid;
+
+    clock_t prevframe;
+    clock_t currframe;
 
     cv::VideoWriter outputVideo;
    

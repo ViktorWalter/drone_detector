@@ -12,6 +12,7 @@
 #define maxConsideredWindows 4 
 #define windowAvgMin 10
 #define windowExtendedShell 20
+#define simpleDisplay false
 
 
 cv::Mat ResizeToFitRectangle(cv::Mat& src, cv::Size size) {
@@ -162,7 +163,7 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
   rewind(program_handle);
   kernelSource = (char*)malloc(program_size + 1);
   kernelSource[program_size] = '\0';
-  fread(kernelSource, sizeof(char), program_size, program_handle);
+  int err = fread(kernelSource, sizeof(char), program_size, program_handle);
   fclose(program_handle);
   program = new cv::ocl::ProgramSource(kernelSource);
 
@@ -216,9 +217,14 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     bool gui,
     bool debug)
 {
+  
+  currframe = clock();
+  float dt = double(currframe - prevframe) / CLOCKS_PER_SEC;
+
   if (first)
   {
     imCurr_t.copyTo(imPrev_g);
+    prevframe = clock();
   }
 
   std::vector<cv::Point2f> outvec;
@@ -480,8 +486,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     ROS_INFO("OptFlow took %f seconds",elapsed_secs);
        
 
-
-
+    float f_g = 1/dt;
 
     k_BordersSurround.args(
         cv::ocl::KernelArg::PtrWriteOnly(activationMap_g),
@@ -491,7 +496,8 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
         cellFlowX_g,
         cellFlowY_g,
         cellFlowNum_g,
-        gridC_width_g
+        gridC_width_g,
+        f_g
         );
 
     begin = clock();
@@ -542,7 +548,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   }
   if (gui)
   {
-    if (false)
+    if (simpleDisplay)
       cv::imshow("corners",imShowCorn);
     else
       showFlow(
@@ -558,6 +564,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   }
 
    imCurr_g.copyTo(imPrev_g);
+   prevframe = currframe;
 
   first = false;
   return outvec;
@@ -610,7 +617,15 @@ std::vector<AttentionWindow> SparseOptFlowOcl::findWindows(
           int dirY = flowY.at<short>(y,x);
           int Act = (int)keypoints[i].response;
           wnd.sizeInCells = cv::Size((int)sz,(int)sz);
-          wnd.rect = cv::Rect2i(d*(x-sz*0.5+0.5)+windowExtendedShell+dirX,d*(y-sz*0.5+0.5)+windowExtendedShell+dirY,d*(sz)+windowExtendedShell,d*(sz)+windowExtendedShell);
+          int wndx = d*(x-sz*0.5+0.5)+windowExtendedShell+dirX;
+          int wndy = d*(y-sz*0.5+0.5)+windowExtendedShell+dirY;
+          int wndw = d*(sz)+windowExtendedShell;
+          int wndh = d*(sz)+windowExtendedShell;
+          wndx = ((wndx)>=0?wndx:0);
+          wndy = ((wndy)>=0?wndy:0);
+          wndw = ((wndx+wndw)<=imCurr_g.cols?wndw:imCurr_g.cols-wndx);
+          wndh = ((wndy+wndh)<=imCurr_g.rows?wndh:imCurr_g.rows-wndy);
+          wnd.rect = cv::Rect2i(wndx,wndy,wndw,wndh);
           wnd.direction = std::make_pair((float)dirX,(float)dirY);
           wnd.Activation = Act;
           windows.push_back(wnd);

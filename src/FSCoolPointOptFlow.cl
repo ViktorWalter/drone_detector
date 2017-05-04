@@ -14,10 +14,10 @@
 #define arraySize 50
 #define MinValThreshold mul24(samplePointSize2,mul24(elemSize,20))//*1*prevFoundNum[currLine])
 //#define MaxAbsDiffThreshold mul24(samplePointSize2,10)
-#define FastThresh 40
+#define FastThresh 30
 #define CornerArraySize 10
 #define maxNumOfBlocks 2000
-#define shiftRadius 1
+#define shiftRadius 2
 #define maxDistMultiplier 1.5
 #define threadsPerCornerPoint 32
 #define distanceWeight (0.03*elemSize)
@@ -27,7 +27,7 @@
 #define allPoints
 #define alphaWeight 05.0
 #define alphaDiffClose 0.25
-#define lenWeight 0.5
+#define lenWeight 0.3
 #define trustMultiplierCount 0.15
 #define trustMultiplierMemory 0.85
 #define perFrame 0.5

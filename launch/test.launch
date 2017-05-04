@@ -10,16 +10,18 @@
 					<arg name="publish" default="true"/>
 					<arg name="useOdom" default="false"/>
 					<arg name="cameraRotated" default="false"/>
+					<arg name="FromVideo" default="false"/>
 					<arg name="VideoNumber" default="1"/>
 					<arg name="cellSize" default="64"/>
 					<arg name="cellOverlay" default="16"/>
-					<arg name="surroundRadius" default="6"/>
+					<arg name="surroundRadius" default="3"/>
 
 				<group ns="$(arg uav_name)">
 
           <node name="drone_detector" pkg="drone_detector" type="drone_detector_node" output="screen"> 
 				        <param name="DEBUG"		type="bool" value="$(arg DEBUG)"/> 
 				        <param name="gui"             type="bool" value="$(arg gui)"/>
+                        <param name="FromVideo"         type="bool" value="$(arg FromVideo)"/>
                         <param name="VideoNumber"     type="int" value="$(arg VideoNumber)"/>
                         <param name="FrameSize"       type="int" value="$(arg FrameSize)"/>
                         <param name="SamplePointSize" type="int" value="$(arg SamplePointSize)"/>
@@ -28,8 +30,6 @@
                         <param name="cellSize"	type="int" value="$(arg cellSize)"/>
                         <param name="cellOverlay"	type="int" value="$(arg cellOverlay)"/>
                         <param name="surroundRadius"	type="int" value="$(arg surroundRadius)"/>
-                        <rosparam file="$(find optic_flow)/yaml/ost.yaml"/>
-                        <rosparam file="$(find optic_flow)/yaml/cam_rot.yaml"/>
                         <param name="method"	type="int" value="$(arg method)"/>
                         <param name="publish"         type="bool" value="$(arg publish)"/>
                         <param name="ScaleFactor"	type="int" value="1"/>

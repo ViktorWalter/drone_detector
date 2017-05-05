@@ -14,7 +14,6 @@
 #define windowExtendedShell 20
 #define simpleDisplay false
 
-
 cv::Mat ResizeToFitRectangle(cv::Mat& src, cv::Size size) {
   if ((src.cols <= size.width) && (src.rows <= size.height))
     return src;

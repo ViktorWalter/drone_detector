@@ -73,7 +73,6 @@ public:
         vc.set(CV_CAP_PROP_FRAME_WIDTH,1280);
         vc.set(CV_CAP_PROP_FRAME_HEIGHT,720);
         vc.set(CV_CAP_PROP_FPS,30);
-        vc.set(CV_CAP_PROP_EXPOSURE,5);
       }
 
       if (!vc.isOpened())

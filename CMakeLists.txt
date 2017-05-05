@@ -6,6 +6,8 @@ FILE(GLOB_RECURSE OPENCL_FILES include *.cl)
 FILE(GLOB_RECURSE LAUNCHER_FILES include *.launch)
 FILE(GLOB_RECURSE YAML_FILES include *.yaml)
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-diagnostics-color")
+
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
@@ -29,15 +31,15 @@ endif()
 
 if (EXISTS /usr/local/include/opencv2/opencv.hpp)
   set(OpenCV_INCLUDE_DIRS /usr/local/include/)
-  set(OpenCV_LIBRARIES /usr/lib/libopencv_core.so)
+  set(OpenCV_LIBRARIES /usr/local/lib/libopencv_core.so)
 else()
   find_package(OpenCV REQUIRED HINTS /usr/local/lib)
 endif()
 message("${OpenCV_INCLUDE_DIRS} ${OpenCV_LIBRARIES}")
 
 if (EXISTS /usr/local/cuda/include/CL/cl.hpp)
-  set(OpenCL_INCLUDE_DIRS /usr/local/cuda/include)
-  if (EXISTS /usr/local/cuda/lib64/libOpenCL.so)
+  set(OpenCL_INCLUDE_DIRS /usr/local/cuda/targets/x86_64-linux/include)
+  if (EXISTS /usr/local/cuda/targets/x86_64-linux/lib/libOpenCL.so)
     set(OpenCL_LIBRARIES /usr/local/cuda/lib64/libOpenCL.so)
   else()
     set(OpenCL_LIBRARIES /usr/local/cuda/lib/libOpenCL.so)

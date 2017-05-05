@@ -14,10 +14,10 @@
 #define arraySize 50
 #define MinValThreshold mul24(samplePointSize2,mul24(elemSize,20))//*1*prevFoundNum[currLine])
 //#define MaxAbsDiffThreshold mul24(samplePointSize2,10)
-#define FastThresh 40
+#define FastThresh 30
 #define CornerArraySize 10
 #define maxNumOfBlocks 2000
-#define shiftRadius 1
+#define shiftRadius 2
 #define maxDistMultiplier 1.5
 #define threadsPerCornerPoint 32
 #define distanceWeight (0.03*elemSize)
@@ -27,9 +27,10 @@
 #define allPoints
 #define alphaWeight 05.0
 #define alphaDiffClose 0.25
-#define lenWeight 0.5
+#define lenWeight 0.3
 #define trustMultiplierCount 0.15
 #define trustMultiplierMemory 0.85
+#define perFrame 0.5
 
 __kernel void CornerPoints(
     __global uchar* input_1, int imgSrcStep, int imgSrcOffset, int imgSrcHeight, int imgSrcWidth,
@@ -61,6 +62,14 @@ __kernel void CornerPoints(
   __local int occupiedField[arraySize][arraySize];
   occupiedField[threadY][threadX] = 0;
 
+//if ((blockX == 0) && (blockY == 0) && (threadX == 0) && (threadY == 0))
+//  printf("step: %d, offset: %d, height: %d, width: %d",imgSrcStep,imgSrcOffset,imgSrcHeight,imgSrcWidth);
+
+//int  px = mad24(blockX,blockSize,threadX);
+//int  py = mad24(blockY,blockSize,threadY);
+//      output_view[mad24(py,imgSrcStep,px)] = 255;
+//      return;
+
   barrier(CLK_LOCAL_MEM_FENCE);
 
   for (int m=1; m<=repetitions; m++)
@@ -72,17 +81,23 @@ __kernel void CornerPoints(
       int x = mad24(blockX,blockSize,i);
       int y = mad24(blockY,blockSize,j);
       //if ((i>=3)&&(i<=maxij)&&(j>=3)&&(j<=maxij))
-      if ((x>=3)&&(x<=imgSrcStep-3)&&(y>=3)&&(y<=imgSrcStep-3))
+      
+
+
+
+      int cadj = 0;
+      int cadj_b = 0;
+      if ((x>=3)&&(x<imgSrcWidth-3)&&(y>=3)&&(y<imgSrcHeight-3))
       {
         uchar I[17];
         I[0] = i1__at(mad24(blockX,(blockSize),i),mad24(blockY,(blockSize),j));
         I[1] = i1__at(mad24(blockX,(blockSize),i),mad24(blockY,(blockSize),(j-3)));
         I[9] = i1__at(mad24(blockX,(blockSize),i),mad24(blockY,(blockSize),(j+3)));
 
-        if (((I[1]>(I[0]-FastThresh)) && (I[1]<(I[0]+FastThresh)))
-            &&
-            ((I[9]>(I[0]-FastThresh)) && (I[9]<(I[0]+FastThresh))))
-          return;
+        if (((I[1]<(I[0]-FastThresh)) || (I[1]>(I[0]+FastThresh)))
+            ||
+            ((I[9]<(I[0]-FastThresh)) || (I[9]>(I[0]+FastThresh))))
+        {
         I[5] = i1__at(mad24(blockX,(blockSize),(i+3)),mad24(blockY,(blockSize),j));
         I[13] = i1__at(mad24(blockX,(blockSize),(i-3)),mad24(blockY,(blockSize),j));
         char l=
@@ -92,99 +107,105 @@ __kernel void CornerPoints(
           (I[1]<(I[0]-FastThresh))+(I[9]<(I[0]-FastThresh))+
           (I[5]<(I[0]-FastThresh))+(I[13]<(I[0]-FastThresh));
 
-//          foundPtsSize[0] =blockNumY;
-//          return;
 
 #ifdef allPoints
         if ( (l>=3) || (h>=3) )
 #else
-        if ( (l>3) || (h>3) )
+          if ( (l>3) || (h>3) )
 #endif
-        {
-          char sg = (l >=3)?-1:1;
-          I[2] = i1__at(mad24(blockX,(blockSize),(i+1)),mad24(blockY,(blockSize),(j-3)));
-          I[3] = i1__at(mad24(blockX,(blockSize),(i+2)),mad24(blockY,(blockSize),(j-2)));
-          I[4] = i1__at(mad24(blockX,(blockSize),(i+3)),mad24(blockY,(blockSize),(j-1)));
-          I[6] = i1__at(mad24(blockX,(blockSize),(i+3)),mad24(blockY,(blockSize),(j+1)));
-          I[7] = i1__at(mad24(blockX,(blockSize),(i+2)),mad24(blockY,(blockSize),(j+2)));
-          I[8] = i1__at(mad24(blockX,(blockSize),(i+1)),mad24(blockY,(blockSize),(j+3)));
-          I[10] = i1__at(mad24(blockX,(blockSize),(i-1)),mad24(blockY,(blockSize),(j+3)));
-          I[11] = i1__at(mad24(blockX,(blockSize),(i-2)),mad24(blockY,(blockSize),(j+2)));
-          I[12] = i1__at(mad24(blockX,(blockSize),(i-3)),mad24(blockY,(blockSize),(j+1)));
-          I[14] = i1__at(mad24(blockX,(blockSize),(i-3)),mad24(blockY,(blockSize),(j-1)));
-          I[15] = i1__at(mad24(blockX,(blockSize),(i-2)),mad24(blockY,(blockSize),(j-2)));
-          I[16] = i1__at(mad24(blockX,(blockSize),(i-1)),mad24(blockY,(blockSize),(j-3)));
-          int cadj = 0;
-          int cadj_b = 0;
-          for (int pix = 1; pix < 16; pix++) {
-            if (sg == 1) {
-              if (I[pix]<(I[0]-FastThresh)) {
-                cadj++; 
-                if (cadj == 12) {
-                  break;
+          {
+            char sg = (l >=3)?-1:1;
+            I[2] = i1__at(mad24(blockX,(blockSize),(i+1)),mad24(blockY,(blockSize),(j-3)));
+            I[3] = i1__at(mad24(blockX,(blockSize),(i+2)),mad24(blockY,(blockSize),(j-2)));
+            I[4] = i1__at(mad24(blockX,(blockSize),(i+3)),mad24(blockY,(blockSize),(j-1)));
+            I[6] = i1__at(mad24(blockX,(blockSize),(i+3)),mad24(blockY,(blockSize),(j+1)));
+            I[7] = i1__at(mad24(blockX,(blockSize),(i+2)),mad24(blockY,(blockSize),(j+2)));
+            I[8] = i1__at(mad24(blockX,(blockSize),(i+1)),mad24(blockY,(blockSize),(j+3)));
+            I[10] = i1__at(mad24(blockX,(blockSize),(i-1)),mad24(blockY,(blockSize),(j+3)));
+            I[11] = i1__at(mad24(blockX,(blockSize),(i-2)),mad24(blockY,(blockSize),(j+2)));
+            I[12] = i1__at(mad24(blockX,(blockSize),(i-3)),mad24(blockY,(blockSize),(j+1)));
+            I[14] = i1__at(mad24(blockX,(blockSize),(i-3)),mad24(blockY,(blockSize),(j-1)));
+            I[15] = i1__at(mad24(blockX,(blockSize),(i-2)),mad24(blockY,(blockSize),(j-2)));
+            I[16] = i1__at(mad24(blockX,(blockSize),(i-1)),mad24(blockY,(blockSize),(j-3)));
+            for (int pix = 1; pix < 16; pix++) {
+              if (sg == 1) {
+                if (I[pix]<(I[0]-FastThresh)) {
+                  cadj++; 
+                  if (cadj == 12) {
+                    break;
+                  }
+                }
+                else {
+                  if (cadj == pix-1) {
+                    cadj_b = cadj; 
+                  }
+                  cadj = 0;
                 }
               }
               else {
-                if (cadj == pix-1) {
-                  cadj_b = cadj; 
+                if (I[pix]>(I[0]+FastThresh)) {
+                  cadj++; 
+                  if (cadj == 12) {
+                    break;
+                  }
                 }
-                cadj = 0;
-              }
-            }
-            else {
-              if (I[pix]>(I[0]+FastThresh)) {
-                cadj++; 
-                if (cadj == 12) {
-                  break;
+                else {
+                  if (cadj == pix-1) {
+                    cadj_b = cadj; 
+                  }
+                  cadj = 0;
                 }
-              }
-              else {
-                if (cadj == pix-1) {
-                  cadj_b = cadj; 
-                }
-                cadj = 0;
               }
             }
           }
-          if ( (cadj + cadj_b) >= 12) {
-            barrier(CLK_LOCAL_MEM_FENCE);
-
-//            atomic_xchg(&occupiedField[threadY][threadX],0);
-            occupiedField[threadY][threadX] = 1;
-            atomic_xchg(&occupiedField[threadY][threadX+1],0);
-            atomic_xchg(&occupiedField[threadY+1][threadX],0);
-//            atomic_cmpxchg(&occupiedField[threadY][threadX],atomic_cmpxchg(&occupiedField[threadY][threadX+1],1,0),1);
-//            atomic_cmpxchg(&occupiedField[threadY][threadX],atomic_cmpxchg(&occupiedField[threadY+1][threadX],1,0),1);
-
-            indexLocal = atomic_inc(&(numFoundBlock[mad24(blockY,blockNumX,blockX)]));
-            indexGlobal = atomic_inc(&(foundPtsSize[0]));
-
-            if (indexLocal <= maxCornersPerBlock)
-            {
-              output_view[
-                mad24(mad24(blockY,(blockSize),j),showCornStep,mad24(blockX,blockSize,i+showCornOffset)) ] =
-                  30;
-              foundPointsX[mad24(mad24(blockY,blockNumX,blockX),foundPointsStep2,indexLocal)]=
-                mad24(blockX,blockSize,i);
-              foundPointsY[mad24(mad24(blockY,blockNumX,blockX),foundPointsStep2,indexLocal)]=
-                mad24(blockY,blockSize,j);
-            }
-            if (occupiedField[threadY][threadX] == 1){
-              foundPtsX_ord[indexGlobal] =
-                mad24(blockX,blockSize,i);
-              foundPtsY_ord[indexGlobal] =
-                mad24(blockY,blockSize,j);
-            }
-          }
-
-
         }
       }
+      if ( (cadj + cadj_b) >= 12) {
+        occupiedField[threadY][threadX] = 1;
+      }
+
+      if (occupiedField[threadY][threadX] == 1){
+        indexLocal = atomic_inc(&(numFoundBlock[mad24(blockY,blockNumX,blockX)]));
+        if (indexLocal < maxCornersPerBlock)
+        {
+//          output_view[
+//            mad24(mad24(blockY,(blockSize),j),showCornStep,mad24(blockX,blockSize,i+showCornOffset)) ] =
+//              100;
+          foundPointsX[mad24(mad24(blockY,blockNumX,blockX),foundPointsStep2,indexLocal)]=
+            mad24(blockX,blockSize,i);
+          foundPointsY[mad24(mad24(blockY,blockNumX,blockX),foundPointsStep2,indexLocal)]=
+            mad24(blockY,blockSize,j);
+        }
+        else{
+         // printf("[overtop:blockX:%d,blockY:%d]\n",blockX,blockY);
+          numFoundBlock[mad24(blockY,blockNumX,blockX)] = maxCornersPerBlock;
+        }
+
+      }
+      
+      barrier(CLK_LOCAL_MEM_FENCE);
+      if ( occupiedField[threadY][threadX] == 1){
+        atomic_xchg(&occupiedField[threadY][threadX+1],0);
+        atomic_xchg(&occupiedField[threadY+1][threadX],0);
+        atomic_xchg(&occupiedField[threadY+1][threadX+1],0);
+      }
+      barrier(CLK_LOCAL_MEM_FENCE);
+
+      if (occupiedField[threadY][threadX] == 1){
+      indexGlobal = atomic_inc(&(foundPtsSize[0]));
+//          output_view[
+//            mad24(mad24(blockY,(blockSize),j),showCornStep,mad24(blockX,blockSize,i+showCornOffset)) ] =
+//              255;
+        foundPtsX_ord[indexGlobal] =
+          mad24(blockX,blockSize,i);
+        foundPtsY_ord[indexGlobal] =
+          mad24(blockY,blockSize,j);
+      }
+
+
     }
-  barrier(CLK_LOCAL_MEM_FENCE);
-  if (indexLocal >= maxCornersPerBlock){
-    numFoundBlock[mad24(blockY,blockNumX,blockX)] = maxCornersPerBlock;
-  }
+
+
   return;
 }
 
@@ -224,6 +245,8 @@ __kernel void OptFlowReduced(
   int corner = -samplePointSize/2;
   int posX = foundPtsX[block]; 
   int posY = foundPtsY[block]; 
+
+  int minI;
 
   __local int abssum[arraySize*arraySize];
   __local int Xpositions[arraySize*arraySize];
@@ -356,13 +379,6 @@ __kernel void OptFlowReduced(
                   i2__at(mul24(elemSize,posX_prev+corner)+i,posY_prev+j+corner)
                   )
                 );
-//              atomic_add(&(abssum[indexLocal]),
-//                abs_diff(
-//                  i1_cn_at(posX+i+corner,posY+j+corner,cn)
-//                  ,
-//                  i2_cn_at(posX_prev+i+corner,posY_prev+j+corner,cn)
-//                  )
-//                );
       }
     }
   }
@@ -376,7 +392,7 @@ __kernel void OptFlowReduced(
   {
 
     int minval = abssum[0];
-    int minI = 0; 
+    minI = 0; 
 
     for (int i=1;i<pointsHeld;i++)
     {
@@ -389,6 +405,9 @@ __kernel void OptFlowReduced(
 
     resX = Xpositions[minI];
     resY = Ypositions[minI];
+    
+    //if (minval == 0)
+    //  printf("\n zero diff: I:%d H:%d X:%d Y:%d",minI,pointsHeld,resX-posX,resY-posY);
 
     //    if ((resX > imgSrcWidth) || (resX < 0))
     //      return;
@@ -404,7 +423,7 @@ __kernel void OptFlowReduced(
 //      resX = invalidFlowVal;
 //      output_view[mad24(posY,showCornStep,posX+showCornOffset) ] = 100;
 //      }
-    if ( ((minval) >= MinValThreshold) && (true))  //if the value is great, then it is considered to be too noisy, blurred or with too great a shift
+    if ( ((minval) > MinValThreshold) && (true))  //if the value is great, then it is considered to be too noisy, blurred or with too great a shift
     {
       resY = invalidFlowVal;
       resX = invalidFlowVal;
@@ -457,7 +476,10 @@ __kernel void OptFlowReduced(
 
     outputPosOrdX[block] = resX;
     outputPosOrdY[block] = resY;
+//  if (abs(posX-resX)>32)
+//    printf("[dist:%d, X:%d, Y:%d]",posX-resX,posX,posY);
   }
+
 
   return;
 }
@@ -473,7 +495,8 @@ __kernel void BordersSurround(
     __global int* inX,
     __global int* inY,
     __global int* inNum,
-    int inStep
+    int inStep,
+    float f
     )
 {
   int outStep2 = outStep/sizeof(short);
@@ -561,6 +584,8 @@ __kernel void BordersSurround(
 //      fmin(prevA[estimPrevCellIndex]*trustMultiplierMemory,2):
 //      0.0f);
   int activation = (int)(
+      (perFrame)*
+      (f)*
       (trustCount)*
       (alphaDiff>alphaDiffClose?
         (float)(alphaDiff*alphaWeight):

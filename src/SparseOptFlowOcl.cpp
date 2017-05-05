@@ -12,6 +12,7 @@
 #define maxConsideredWindows 4 
 #define windowAvgMin 10
 #define windowExtendedShell 20
+#define simpleDisplay false
 
 
 cv::Mat ResizeToFitRectangle(cv::Mat& src, cv::Size size) {
@@ -83,7 +84,7 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
   cv::ocl::setUseOpenCL(true);
 
   cv::ocl::Context* mainContext = new cv::ocl::Context();
-  mainContext->create(cv::ocl::Device::TYPE_DGPU);
+  mainContext->create(cv::ocl::Device::TYPE_GPU);
   cv::ocl::Device(mainContext->device(0));
 
   if (mainContext->ndevices() == 0)
@@ -113,19 +114,26 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
 
   ROS_INFO("Device vendor is %s",Vendor);
   if (device.isNVidia())
+#ifdef CL_DEVICE_WARP_SIZE_NV
     cl_int ErrCode = clGetDeviceInfo(
         did,
         CL_DEVICE_WARP_SIZE_NV,
         sizeof(cl_uint),
         &EfficientWGSize,
         NULL);
-  else if (device.isIntel())
-    cl_int ErrCode = clGetDeviceInfo(
-        did,
-        CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
-        sizeof(cl_uint),
-        &EfficientWGSize,
-        NULL);
+#else 
+  return;
+#endif
+  else if (device.isIntel()){
+    ROS_INFO("The device is INTEL");
+     cl_int ErrCode = clGetDeviceInfo(
+         did,
+         CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
+         sizeof(cl_uint),
+         &EfficientWGSize,
+         NULL);
+    if (EfficientWGSize == 0) EfficientWGSize = 32;
+  }
   else {
     ROS_INFO("Only NVIDIA and Intel cards are supported");
     return;
@@ -133,6 +141,7 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
 
   ROS_INFO("Warp size is %d",EfficientWGSize);
   viableSD = floor(sqrt(max_wg_size));
+  ROS_INFO("Viable SD:%d",viableSD);
   int viableSR = ((viableSD % 2)==1) ? ((viableSD-1)/2) : ((viableSD-2)/2);
 
   scanBlock = (scanRadius <= viableSR ? (2*scanRadius+1) : viableSD);
@@ -154,7 +163,7 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
   rewind(program_handle);
   kernelSource = (char*)malloc(program_size + 1);
   kernelSource[program_size] = '\0';
-  fread(kernelSource, sizeof(char), program_size, program_handle);
+  int err = fread(kernelSource, sizeof(char), program_size, program_handle);
   fclose(program_handle);
   program = new cv::ocl::ProgramSource(kernelSource);
 
@@ -208,9 +217,14 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     bool gui,
     bool debug)
 {
+  
+  currframe = clock();
+  float dt = double(currframe - prevframe) / CLOCKS_PER_SEC;
+
   if (first)
   {
     imCurr_t.copyTo(imPrev_g);
+    prevframe = clock();
   }
 
   std::vector<cv::Point2f> outvec;
@@ -241,7 +255,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   std::size_t globalC[3] = {gridC[0]*blockC[0],gridC[1]*blockC[1],1};
 
   if (first){
-    ROS_INFO("%dx%d",gridA[0],gridA[1]);
+    ROS_INFO("%dx%d",(int)gridA[0],(int)gridA[1]);
 
     foundPointsX_g      = cv::UMat(cv::Size(maxCornersPerBlock,gridA[1]*gridA[0]),CV_16UC1);
     foundPointsY_g      = cv::UMat(cv::Size(maxCornersPerBlock,gridA[1]*gridA[0]),CV_16UC1);
@@ -379,8 +393,8 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
       numFoundBlock_g,
       foundPtsSize_g);
 
-  k_CornerPoints.run(2,globalA,blockA,true);
 
+  k_CornerPoints.run(2,globalA,blockA,true);
 //  k_Tester.args(
 //      cv::ocl::KernelArg::ReadWriteNoSize(imShowcorn_g));
 //  k_Tester.run(2,globalA,blockA,true);
@@ -397,7 +411,6 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
       NULL);
 
   ROS_INFO("Number of found points for next phase: %d",foundPtsSize);
-
 
   if ( (foundPtsSize > 0) && (!first) && (true))
   {
@@ -471,8 +484,9 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     clock_t end = clock();
     double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
     ROS_INFO("OptFlow took %f seconds",elapsed_secs);
+       
 
-
+    float f_g = 1/dt;
 
     k_BordersSurround.args(
         cv::ocl::KernelArg::PtrWriteOnly(activationMap_g),
@@ -482,7 +496,8 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
         cellFlowX_g,
         cellFlowY_g,
         cellFlowNum_g,
-        gridC_width_g
+        gridC_width_g,
+        f_g
         );
 
     begin = clock();
@@ -495,8 +510,8 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     
   }     
 
-//  cv::Mat scaledActMap;
-//  activationMap_g.convertTo(scaledActMap,CV_8UC1);
+  cv::Mat scaledActMap;
+  activationMap_g.convertTo(scaledActMap,CV_8UC1);
 //  cv::resize(scaledActMap*10, scaledActMap, imView.size(),0,0,cv::INTER_NEAREST);
 //  cv::imshow("Activation", scaledActMap);
 
@@ -513,7 +528,6 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
 
   foundPointsX_g.copyTo(foundPointsX_prev_g);
   foundPointsY_g.copyTo(foundPointsY_prev_g);
-  activationMap_g.copyTo(activationMap_prev_g);
 
   std::vector<AttentionWindow> wnds =
     findWindows(
@@ -521,8 +535,6 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
         averageX_g.getMat(cv::ACCESS_READ),
         averageY_g.getMat(cv::ACCESS_READ)
         );
-
-
 
 
 
@@ -536,7 +548,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   }
   if (gui)
   {
-    if (false)
+    if (simpleDisplay)
       cv::imshow("corners",imShowCorn);
     else
       showFlow(
@@ -552,6 +564,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
   }
 
    imCurr_g.copyTo(imPrev_g);
+   prevframe = currframe;
 
   first = false;
   return outvec;
@@ -604,7 +617,15 @@ std::vector<AttentionWindow> SparseOptFlowOcl::findWindows(
           int dirY = flowY.at<short>(y,x);
           int Act = (int)keypoints[i].response;
           wnd.sizeInCells = cv::Size((int)sz,(int)sz);
-          wnd.rect = cv::Rect2i(d*(x-sz*0.5+0.5)+windowExtendedShell+dirX,d*(y-sz*0.5+0.5)+windowExtendedShell+dirY,d*(sz)+windowExtendedShell,d*(sz)+windowExtendedShell);
+          int wndx = d*(x-sz*0.5+0.5)+windowExtendedShell+dirX;
+          int wndy = d*(y-sz*0.5+0.5)+windowExtendedShell+dirY;
+          int wndw = d*(sz)+windowExtendedShell;
+          int wndh = d*(sz)+windowExtendedShell;
+          wndx = ((wndx)>=0?wndx:0);
+          wndy = ((wndy)>=0?wndy:0);
+          wndw = ((wndx+wndw)<=imCurr_g.cols?wndw:imCurr_g.cols-wndx);
+          wndh = ((wndy+wndh)<=imCurr_g.rows?wndh:imCurr_g.rows-wndy);
+          wnd.rect = cv::Rect2i(wndx,wndy,wndw,wndh);
           wnd.direction = std::make_pair((float)dirX,(float)dirY);
           wnd.Activation = Act;
           windows.push_back(wnd);

@@ -7,7 +7,9 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/core/ocl.hpp>
 #include <opencv2/features2d/features2d.hpp>
+
 #include <CL/cl.h>
+#include <CL/cl_ext.h>
 
 struct AttentionWindow {
   cv::Rect rect;

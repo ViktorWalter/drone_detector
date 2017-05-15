@@ -12,7 +12,7 @@
 #define i2_b_at(x,y) input_2[mad24(y,imgSrcStep,(imgSrcOffset+mad24(x,3,0)))]
 
 #define arraySize 50
-#define MinValThreshold mul24(samplePointSize2,mul24(elemSize,20))//*1*prevFoundNum[currLine])
+#define MinValThreshold mul24(samplePointSize2,mul24(elemSize,30))//*1*prevFoundNum[currLine])
 //#define MaxAbsDiffThreshold mul24(samplePointSize2,10)
 #define FastThresh 30
 #define CornerArraySize 10

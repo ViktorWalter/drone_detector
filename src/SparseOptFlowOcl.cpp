@@ -112,16 +112,16 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
       NULL);
 
   ROS_INFO("Device vendor is %s",Vendor);
-  if (device.isNVidia())
+  if (device.isNVidia()){
 #ifdef CL_DEVICE_WARP_SIZE_NV
     cl_int ErrCode = clGetDeviceInfo(
         did,
         CL_DEVICE_WARP_SIZE_NV,
         sizeof(cl_uint),
         &EfficientWGSize,
-        NULL);
+        NULL);}
 #else 
-  return;
+  return;}
 #endif
   else if (device.isIntel()){
     ROS_INFO("The device is INTEL");

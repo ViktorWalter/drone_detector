@@ -41,6 +41,7 @@ public:
     {
         ros::NodeHandle private_node_handle("~");
 
+        private_node_handle.param("FromBag", FromBag, bool(true));
         private_node_handle.param("FromVideo", FromVideo, bool(true));
         private_node_handle.param("VideoNumber", VideoNumber, int(1));
       switch (VideoNumber) {
@@ -62,23 +63,30 @@ public:
           break;
       } 
       ROS_INFO("path = %s",VideoPath.str().c_str());
+      
+        private_node_handle.param("camNum", camNum, int(0));
 
       if (FromVideo){
         vc.open(VideoPath.str());
         vc.set(CV_CAP_PROP_POS_MSEC,(7*60+18)*1000);
+        if (!vc.isOpened())
+        {
+          ROS_INFO("video failed to open");
+        }
       }
-      else
+      else if (!FromBag)
       {
-        vc.open(0);
+        ROS_INFO("Using camera no. %d",camNum);
+        vc.open(camNum);
         vc.set(CV_CAP_PROP_FRAME_WIDTH,1280);
         vc.set(CV_CAP_PROP_FRAME_HEIGHT,720);
         vc.set(CV_CAP_PROP_FPS,30);
+        if (!vc.isOpened())
+        {
+          ROS_INFO("camera failed to start");
+        }
       }
 
-      if (!vc.isOpened())
-      {
-        ROS_INFO("video failed to open");
-      }
 
 //      cv::Mat testmat;
 
@@ -92,14 +100,10 @@ public:
         /* methods:
          *      0 -         */
 
-        if(method < 3 && !useCuda){
-            ROS_ERROR("Specified method support only CUDA");
-        }
 
         private_node_handle.param("ScanRadius", scanRadius, int(8));
         private_node_handle.param("FrameSize", frameSize, int(64));
         private_node_handle.param("SamplePointSize", samplePointSize, int(8));
-        private_node_handle.param("NumberOfBins", numberOfBins, int(20));
 
 
         private_node_handle.param("StepSize", stepSize, int(0));
@@ -119,6 +123,7 @@ public:
 
 
         private_node_handle.param("storeVideo", storeVideo, bool(false));
+
 
 
 
@@ -146,43 +151,45 @@ public:
 
         begin = ros::Time::now();
 
+          bmm = new SparseOptFlowOcl(
+              samplePointSize,
+              scanRadius,
+              stepSize,
+              cx,
+              cy,
+              fx,
+              fy,
+              k1,
+              k2,
+              k3,
+              p1,
+              p2,
+              false,
+              cellSize,
+              cellOverlay,
+              surroundRadius);
 
-
-
-
-        if (ImgCompressed){
+        if (FromBag){
+          stopped = false;
+          if (ImgCompressed){
             ImageSubscriber = node.subscribe("camera", 1, &DroneDetector::ProcessCompressed, this);
-        }else{
+          }else{
             ImageSubscriber = node.subscribe("camera", 1, &DroneDetector::ProcessRaw, this);
+          }
         }
-
-        bmm = new SparseOptFlowOcl(
-                  samplePointSize,
-                  scanRadius,
-                  stepSize,
-                  cx,
-                  cy,
-                  fx,
-                  fy,
-                  k1,
-                  k2,
-                  k3,
-                  p1,
-                  p2,
-                  false,
-                  cellSize,
-                  cellOverlay,
-                  surroundRadius);
-        if (bmm->initialized)
-          ProcessCycle();
+        else{
+          if (bmm->initialized)
+            ProcessVideoInput();
+        }
     }
+
     ~DroneDetector(){
 
     }
 
 private:
 
-    void ProcessCycle()
+    void ProcessVideoInput()
     {
       cv::namedWindow("cv_Main", CV_GUI_NORMAL|CV_WINDOW_AUTOSIZE); 
       cv::RNG rng(12345);
@@ -218,65 +225,87 @@ private:
     {
         cv_bridge::CvImagePtr image;
         image = cv_bridge::toCvCopy(image_msg, enc::BGR8);
-        Process(image);
+        ProcessSingleImage(image);
     }
 
     void ProcessRaw(const sensor_msgs::ImageConstPtr& image_msg)
     {
         cv_bridge::CvImagePtr image;
         image = cv_bridge::toCvCopy(image_msg, enc::BGR8);
-        Process(image);
+        ProcessSingleImage(image);
     }
 
 
-    void Process(const cv_bridge::CvImagePtr image)
+    void ProcessSingleImage(const cv_bridge::CvImagePtr image)
     {
+      if (stopped) return;
+      int key = -1;
+
         // First things first
-        if (first)
-        {
+      if (first)
+      {
 
             if(DEBUG){
                 ROS_INFO("Source img: %dx%d", image->image.cols, image->image.rows);
             }
+            cv::namedWindow("cv_Main", CV_GUI_NORMAL|CV_WINDOW_AUTOSIZE); 
 
             first = false;
         }
+        bmm->processImage(
+            image->image
+            ,
+            image->image
+            );
+        /* cv::imshow("fthis",image->image); */
 
-        if(!gotCamInfo){
-            ROS_WARN("Camera info didn't arrive yet! We don't have focus lenght coefficients. Can't publish optic flow.");
-            return;
-        }
+
+
+
+
+
+
+        key = cv::waitKey(10);
+
+      if (key == 13)
+        stopped = true;
+
+//
+//        if(!gotCamInfo){
+//            ROS_WARN("Camera info didn't arrive yet! We don't have focus lenght coefficients. Can't publish optic flow.");
+//            return;
+//        }
 
         // Print out frequency
-        ros::Duration dur = ros::Time::now()-begin;
-        begin = ros::Time::now();
-        if(DEBUG){
-            ROS_INFO("freq = %fHz",1.0/dur.toSec());
-        }
+//        ros::Duration dur = ros::Time::now()-begin;
+//        begin = ros::Time::now();
+//        if(DEBUG){
+//            ROS_INFO("freq = %fHz",1.0/dur.toSec());
+//        }
 
 
         // Scaling
-        if (ScaleFactor != 1){
-            cv::resize(image->image,imOrigScaled,cv::Size(image->image.size().width/ScaleFactor,image->image.size().height/ScaleFactor));
-        }else{
-            imOrigScaled = image->image.clone();
-        }
+//        if (ScaleFactor != 1){
+//            cv::resize(image->image,imOrigScaled,cv::Size(image->image.size().width/ScaleFactor,image->image.size().height/ScaleFactor));
+//        }else{
+//            imOrigScaled = image->image.clone();
+//        }
 
         //ROS_INFO("Here 1");
 
 
         // Cropping
-        if (!coordsAcquired)
-        {
-            imCenterX = imOrigScaled.size().width / 2;
-            imCenterY = imOrigScaled.size().height / 2;
-            xi = imCenterX - (frameSize/2);
-            yi = imCenterY - (frameSize/2);
-            frameRect = cv::Rect(xi,yi,frameSize,frameSize);
-            midPoint = cv::Point2i((frameSize/2),(frameSize/2));
-        }
-
-        //ROS_INFO("Here 2");
+//        if (!coordsAcquired)
+//        {
+//            imCenterX = imOrigScaled.size().width / 2;
+//            imCenterY = imOrigScaled.size().height / 2;
+//            xi = imCenterX - (frameSize/2);
+//            yi = imCenterY - (frameSize/2);
+//            frameRect = cv::Rect(xi,yi,frameSize,frameSize);
+//            midPoint = cv::Point2i((frameSize/2),(frameSize/2));
+//        }
+//
+//        //ROS_INFO("Here 2");
 
         //  Converting color
 //        cv::cvtColor(imOrigScaled(frameRect),imCurr,CV_RGB2GRAY);
@@ -290,8 +319,11 @@ private:
     std::stringstream MaskPath;
     int VideoNumber;
     bool FromVideo;
+    bool FromBag;
+    int camNum;
 
     bool first;
+    bool stopped;
 
     ros::Time RangeRecTime;
 

@@ -28,6 +28,8 @@
 #define alphaWeight 05.0
 #define alphaDiffClose 0.25
 #define lenWeight 0.3
+#define telepWeight 10.0
+#define telepThreshold 6
 #define trustMultiplierCount 0.15
 #define trustMultiplierMemory 0.85
 #define perFrame 0.5
@@ -495,6 +497,7 @@ __kernel void BordersSurround(
     __global int* inX,
     __global int* inY,
     __global int* inNum,
+    __global int* prevNum,
     int inStep,
     float f
     )
@@ -513,9 +516,38 @@ __kernel void BordersSurround(
   int currIndexOutput = mad24(blockY,outStep2,blockX+outOffset2);
   int currIndexCenter = mad24(blockY,inStep,blockX);
   int currIndexSurr;
+  
+
+  float teleportation;
+  int diffNum = abs(inNum[currIndexCenter]-prevNum[currIndexCenter]);
+  if (
+      (
+       (inNum[currIndexCenter]<telepThreshold) !=
+       (prevNum[currIndexCenter]<telepThreshold)
+      ) &&
+      (diffNum > telepThreshold)
+     ){
+    teleportation =
+      (diffNum)/((float)((inNum[currIndexCenter]>prevNum[currIndexCenter])?inNum[currIndexCenter]:prevNum[currIndexCenter]));
+  }
+  else {
+    teleportation = 0.0;
+  }
+
+  if ((teleportation>0.0) && (teleportation<1.0))
+    printf("I");
+
+
+    /* int diffNum = abs(inNum[currIndexCenter]-prevNum[currIndexCenter]); */
+    /* if (diffNum > minPointsThreshold) */
+    /*   teleportation = telepWeight*(diffNum)/(float)(inNum[currIndexCenter]>prevNum[currIndexCenter]?inNum[currIndexCenter]:prevNum[currIndexCenter]); */
+    /* else */
+    /*   teleportation = 0; */
+
+
 
   if (inNum[currIndexCenter] < minPointsThreshold) {
-    outA[currIndexOutput] = trustMultiplierMemory*prevA[currIndexOutput];
+    outA[currIndexOutput] = trustMultiplierMemory*prevA[currIndexOutput]+telepWeight*teleportation;
     outB[currIndexOutput] = 0;
     outC[currIndexOutput] = 0;
     return;
@@ -594,7 +626,7 @@ __kernel void BordersSurround(
       );
   int prevActivation = prevA[estimPrevCellIndex];
 
-  activation = (int)(activation + trustMultiplierMemory*(prevActivation));
+  activation = (int)(activation + trustMultiplierMemory*(prevActivation) + telepWeight*teleportation);
 
   outA[currIndexOutput] = (short)activation;
   outB[currIndexOutput] = (short)avgInX;

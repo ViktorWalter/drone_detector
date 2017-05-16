@@ -296,6 +296,13 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
           sizeof(cl_int)*gridC[0]*gridC[1],
           NULL,
           NULL);
+    cellFlowNum_prev_g = 
+      clCreateBuffer(
+          ctx,
+          CL_MEM_READ_WRITE,
+          sizeof(cl_int)*gridC[0]*gridC[1],
+          NULL,
+          NULL);
     
     emptyCellGrid = new cl_int[gridC[0]*gridC[1]];
     for (int i = 0; i < gridC[0]*gridC[1]; i++) {
@@ -317,6 +324,16 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
           sizeof(cl_int)*gridA[0]*gridA[1],
           NULL,
           NULL);
+    clEnqueueWriteBuffer(
+        cqu,
+        cellFlowNum_prev_g,
+        CL_TRUE,
+        0,
+        sizeof(cl_int)*gridC[0]*gridC[1],
+        emptyCellGrid,
+        0,
+        NULL,
+        NULL);
 
     foundPtsSize_g =
       clCreateBuffer(
@@ -495,6 +512,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
         cellFlowX_g,
         cellFlowY_g,
         cellFlowNum_g,
+        cellFlowNum_prev_g,
         gridC_width_g,
         f_g
         );
@@ -521,6 +539,16 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
       0,
       0,
       sizeof(cl_int)*gridA[0]*gridA[1],
+      0,
+      NULL,
+      NULL);
+  clEnqueueCopyBuffer(
+      cqu,
+      cellFlowNum_g,
+      cellFlowNum_prev_g,
+      0,
+      0,
+      sizeof(cl_int)*gridC[0]*gridC[1],
       0,
       NULL,
       NULL);

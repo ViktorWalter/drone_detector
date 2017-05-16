@@ -62,6 +62,7 @@ private:
     cl_mem cellFlowX_g;
     cl_mem cellFlowY_g;
     cl_mem cellFlowNum_g;
+    cl_mem cellFlowNum_prev_g;
     cl_mem exclusions_g;
 
     int samplePointSize;

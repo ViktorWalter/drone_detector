@@ -42,6 +42,7 @@ public:
         ros::NodeHandle private_node_handle("~");
 
         private_node_handle.param("FromBag", FromBag, bool(true));
+        private_node_handle.param("Flip", Flip, bool(false));
         private_node_handle.param("FromVideo", FromVideo, bool(true));
         private_node_handle.param("VideoNumber", VideoNumber, int(1));
       switch (VideoNumber) {
@@ -61,8 +62,16 @@ public:
           VideoPath << SourceDir << "videos/CameraTomas.MP4)";
           MaskPath << SourceDir << "masks/fourth.bmp";
           break;
+        default:
+          private_node_handle.param("MaskPath", MaskPathHard, std::string("~/drone_detector/masks/generic.bmp"));
+
       } 
-      ROS_INFO("path = %s",VideoPath.str().c_str());
+
+      if (MaskPathHard.empty()){
+          MaskPathHard = MaskPath.str();
+      }
+      ROS_INFO("VideoPath = %s",VideoPath.str().c_str());
+      ROS_INFO("MaskPath = %s",MaskPathHard.c_str());
       
         private_node_handle.param("camNum", camNum, int(0));
 
@@ -194,7 +203,8 @@ private:
       cv::namedWindow("cv_Main", CV_GUI_NORMAL|CV_WINDOW_AUTOSIZE); 
       cv::RNG rng(12345);
       
-      cv::Mat mask = cv::imread(MaskPath.str().c_str());
+      cv::Mat mask = cv::imread(MaskPathHard.c_str());
+
       cv::Mat imCurr_raw;
 
       int key = -1;
@@ -205,14 +215,14 @@ private:
        // cv::imwrite(MaskPath.str().c_str(),imCurr_raw);
        
 
-        //imCurr_raw.copyTo(imCurr,mask);
-        imCurr_raw.copyTo(imCurr);
+        imCurr_raw.copyTo(imCurr,mask);
+        //imCurr_raw.copyTo(imCurr);
         //cv::resize(imCurr_raw,imCurr,cv::Size(320,240));
         //cv::imshow("vw",imCurr);
 
        bmm->processImage(
            imCurr,
-           imCurr
+           imCurr_raw
            );
 
         key = cv::waitKey(10);
@@ -252,10 +262,20 @@ private:
 
             first = false;
         }
+      cv::Mat localImg_raw, localImg;
+        if (Flip){
+          cv::flip(image->image,localImg_raw,-1);
+        }
+        else
+          image->image.copyTo(localImg_raw);
+
+        cv::Mat mask = cv::imread(MaskPathHard.c_str());
+        localImg_raw.copyTo(localImg,mask);
+
         bmm->processImage(
-            image->image
+            localImg
             ,
-            image->image
+            localImg_raw
             );
         /* cv::imshow("fthis",image->image); */
 
@@ -317,6 +337,7 @@ private:
     cv::VideoCapture vc;
     std::stringstream VideoPath;
     std::stringstream MaskPath;
+    std::string MaskPathHard;
     int VideoNumber;
     bool FromVideo;
     bool FromBag;
@@ -324,6 +345,8 @@ private:
 
     bool first;
     bool stopped;
+
+    bool Flip;
 
     ros::Time RangeRecTime;
 

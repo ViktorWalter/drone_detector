@@ -1,0 +1,61 @@
+<launch>
+	<arg name="uav_name" default="$(optenv UAV_NAME uav1)"/>
+  <arg name="DEBUG" default="false"/>
+  <arg name="gui" default="true"/>
+  <arg name="method" default="3"/>
+  <arg name="SamplePointSize" default="16"/>
+  <arg name="ScanRadius" default="8"/>
+  <arg name="StepSize" default="10"/>
+  <arg name="FrameSize" default="1000"/>
+  <arg name="publish" default="true"/>
+  <arg name="useOdom" default="false"/>
+  <arg name="cameraRotated" default="false"/>
+  <arg name="FromVideo" default="false"/>
+  <arg name="VideoNumber" default="9"/>
+  <arg name="cellSize" default="64"/>
+  <arg name="cellOverlay" default="16"/>
+  <arg name="surroundRadius" default="3"/>
+  <arg name="camNum" default="0"/>
+  <arg name="FromBag" default="true"/>
+  <arg name="BagFile" default="$(env HOME)/bag_files/_2017-05-11-18-46-14.bag.active"/>
+  <arg name="Topic" default="/uav1/mobius/image_raw/compressed"/>
+  <arg name="Flip" default="false"/>
+  <arg name="MaskPath" default="/home/viktor/drone_detector/masks/generic.bmp"/>
+  <arg name="Delay" default="180"/>
+
+  <group ns="$(arg uav_name)">
+
+    <node pkg="rosbag" type="play" name="player"  args="--clock $(arg BagFile) -s $(arg Delay)" />
+
+    <node name="drone_detector" pkg="drone_detector" type="drone_detector_node" output="screen"> 
+      <param name="DEBUG"		type="bool" value="$(arg DEBUG)"/> 
+      <param name="gui"             type="bool" value="$(arg gui)"/>
+      <param name="Flip"             type="bool" value="$(arg Flip)"/>
+      <param name="MaskPath"             type="string" value="$(arg MaskPath)"/>
+      <param name="FromVideo"         type="bool" value="$(arg FromVideo)"/>
+      <param name="FromBag"         type="bool" value="$(arg FromBag)"/>
+      <param name="Topic"         type="string" value="$(arg Topic)"/>
+      <param name="VideoNumber"     type="int" value="$(arg VideoNumber)"/>
+      <param name="FrameSize"       type="int" value="$(arg FrameSize)"/>
+      <param name="SamplePointSize" type="int" value="$(arg SamplePointSize)"/>
+      <param name="ScanRadius"    type="int" value="$(arg ScanRadius)"/>
+      <param name="StepSize"	type="int" value="$(arg StepSize)"/>
+      <param name="cellSize"	type="int" value="$(arg cellSize)"/>
+      <param name="cellOverlay"	type="int" value="$(arg cellOverlay)"/>
+      <param name="surroundRadius"	type="int" value="$(arg surroundRadius)"/>
+      <param name="method"	type="int" value="$(arg method)"/>
+      <param name="publish"         type="bool" value="$(arg publish)"/>
+      <param name="ScaleFactor"	type="int" value="1"/>
+      <param name="RangerDataPath"    type="string" value="/$(arg uav_name)/terarangerone/range"/>
+      <param name="CameraImageCompressed"    type="bool" value="true"/>
+      <param name="cameraRotated"    type="bool" value="$(arg cameraRotated)"/>
+      <param name="useOdom"           type="bool" value="$(arg useOdom)"/>
+      <param name="camNum"           type="int" value="$(arg camNum)"/>
+
+      <remap from="odometry" to="mbzirc_odom/new_odom"/>
+      <remap from="camera" to="$(arg Topic)"/>
+
+
+    </node>
+  </group>
+</launch>

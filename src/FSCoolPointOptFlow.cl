@@ -14,7 +14,7 @@
 #define arraySize 50
 #define MinValThreshold mul24(samplePointSize2,mul24(elemSize,30))//*1*prevFoundNum[currLine])
 //#define MaxAbsDiffThreshold mul24(samplePointSize2,10)
-#define FastThresh 30
+#define FastThresh 20
 #define CornerArraySize 10
 #define maxNumOfBlocks 2000
 #define shiftRadius 2

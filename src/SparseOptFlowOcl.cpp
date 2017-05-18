@@ -1,6 +1,7 @@
 #include "../include/drone_detector/SparseOptFlowOcl.h"
 #include <ostream>
 #include <dirent.h>
+#include <algorithm>
 #include "ros/package.h"
 #include <X11/Xlib.h>
 
@@ -13,6 +14,7 @@
 #define windowAvgMin 10
 #define windowExtendedShell 20
 #define simpleDisplay false
+#define maxWindowNumber 3
 
 cv::Mat ResizeToFitRectangle(cv::Mat& src, cv::Size size) {
   if ((src.cols <= size.width) && (src.rows <= size.height))
@@ -65,6 +67,10 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
   k3 = i_k3;
   p1 = i_p1;
   p2 = i_p2;
+
+  int d = cellSize - cellOverlay;
+  baseWindowSize = d*3;
+  imShowWindows = cv::Mat(cv::Size(baseWindowSize*maxWindowNumber,baseWindowSize),CV_8UC3);
   
   Display* disp = XOpenDisplay(NULL);
   Screen* scrn = DefaultScreenOfDisplay(disp);
@@ -78,6 +84,7 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
     outputVideo.open("newCapture.avi", CV_FOURCC('M','P','E','G'),50,cv::Size(240,240),false);
     if (!outputVideo.isOpened())
       ROS_INFO("Could not open output video file");
+    
   }
 
   cv::ocl::setUseOpenCL(true);
@@ -638,6 +645,8 @@ std::vector<AttentionWindow> SparseOptFlowOcl::findWindows(
   for (int i = 0; i<keypoints.size(); i++){
           AttentionWindow wnd;
           double sz = keypoints[i].size;
+          if ((sz > maxWindowSize) || (sz < minWindowSize))
+            continue;
           int x  = keypoints[i].pt.x;
           int y  = keypoints[i].pt.y;
           int dirX = flowX.at<short>(y,x);
@@ -652,6 +661,8 @@ std::vector<AttentionWindow> SparseOptFlowOcl::findWindows(
           wndy = ((wndy)>=0?wndy:0);
           wndw = ((wndx+wndw)<=imCurr_g.cols?wndw:imCurr_g.cols-wndx);
           wndh = ((wndy+wndh)<=imCurr_g.rows?wndh:imCurr_g.rows-wndy);
+          if ((wndw<=0) || (wndh<=0))
+            continue;
           wnd.rect = cv::Rect2i(wndx,wndy,wndw,wndh);
           wnd.direction = std::make_pair((float)dirX,(float)dirY);
           wnd.Activation = Act;
@@ -675,9 +686,9 @@ void SparseOptFlowOcl::showFlow(
 {
   cv::Mat out;
 
+  drawWindows(wnds);
   drawOpticalFlow(posx.getMat(cv::ACCESS_READ), posy.getMat(cv::ACCESS_READ), flowx.getMat(cv::ACCESS_READ), flowy.getMat(cv::ACCESS_READ), blankBG, out );
   drawActivation(actMap.getMat(cv::ACCESS_READ),avgX.getMat(cv::ACCESS_READ),avgY.getMat(cv::ACCESS_READ));
-  drawWindows(wnds);
 
   imView = ResizeToFitRectangle(imView,monitorSize);
   cv::imshow("cv_Main", imView);
@@ -784,14 +795,32 @@ void SparseOptFlowOcl::drawActivation(
 
 void SparseOptFlowOcl::drawWindows(std::vector<AttentionWindow> wnds)
 {
-  for (int i=0; i< wnds.size();i++){
+  if (wnds.size() == 0)
+    return;
+
+
+  for (int i=0; i<std::min(maxWindowNumber,(int)wnds.size());i++){
     cv::Rect rect = wnds[i].rect;
+    if (std::max(rect.width,rect.height) > baseWindowSize){
+      baseWindowSize = std::max(rect.width,rect.height);
+      cv::copyMakeBorder(
+          imShowWindows,imShowWindows,
+          0,
+          baseWindowSize*maxWindowNumber - rect.width,
+          0,
+          baseWindowSize - imShowWindows.rows,
+          cv::BORDER_CONSTANT);
+      imShowWindows = cv::Mat(cv::Size(baseWindowSize*maxWindowNumber,baseWindowSize),CV_8UC3);
+    }
     cv::Point2i corner1 = cv::Point2i(rect.x,rect.y);
     cv::Point2i corner2 = cv::Point2i(rect.x+rect.width,rect.y+rect.height);
+
+    ROS_INFO("x:%d, y:0, w:%d, h:%d; W:%d, H:%d",baseWindowSize*i, rect.width, rect.height, imShowWindows.cols, imShowWindows.rows);
     cv::rectangle(imView, corner1,corner2, cv::Scalar(255,0,0), 2);
-    char wndname[10];
-    std::sprintf(wndname,"cv_fl_%d",i);
-    cv::imshow(wndname, imCurr_g(wnds[i].rect));
+    /* char wndname[10]; */
+    /* std::sprintf(wndname,"cv_fl_%d",i); */
+    imView(rect).copyTo(imShowWindows(cv::Rect(baseWindowSize*i,0,rect.width,rect.height)));
   }
+  cv::imshow("cl_fl_windows", imShowWindows);
 }
 

@@ -86,7 +86,8 @@ private:
     cv::VideoWriter outputVideo;
    
     cv::Mat imView;
-
+    cv::Mat imShowWindows;
+    int baseWindowSize;
     cv::Size monitorSize;
 
     static bool sortWindows(AttentionWindow a, AttentionWindow b)

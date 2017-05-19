@@ -499,7 +499,7 @@ __kernel void BordersSurround(
     __global int* inNum,
     __global int* prevNum,
     int inStep,
-    float f
+    float freq
     )
 {
   int outStep2 = outStep/sizeof(short);
@@ -534,8 +534,6 @@ __kernel void BordersSurround(
     teleportation = 0.0;
   }
 
-  if ((teleportation>0.0) && (teleportation<1.0))
-    printf("I");
 
 
     /* int diffNum = abs(inNum[currIndexCenter]-prevNum[currIndexCenter]); */
@@ -617,7 +615,7 @@ __kernel void BordersSurround(
 //      0.0f);
   int activation = (int)(
       (perFrame)*
-      (f)*
+      (freq)*
       (trustCount)*
       (alphaDiff>alphaDiffClose?
         (float)(alphaDiff*alphaWeight):
@@ -633,14 +631,176 @@ __kernel void BordersSurround(
   outC[currIndexOutput] = (short)avgInY;
 }
 
-__kernel void BordersGlobal_C1_D0(
+__kernel void BordersGlobal(
     )
 {
 }
 
-__kernel void BordersHeading_C1_D0(
+__kernel void BordersEgoMovement(
+    __global ushort* outA,
+    __global short* prevA,
+    __global short* outB,
+    __global short* outC,
+    int outStep,
+    int outOffset,
+    __global int* inX,
+    __global int* inY,
+    __global int* inNum,
+    __global int* prevNum,
+    int inStep,
+    float freq,
+    float focalDist, //assume fx=fy, because I can't be bothered
+    float cx,
+    float cy,
+    float YawRate,
+    float PitchRate,
+    float RollRate,
     )
 {
+  // u_r = f*Yaw'+y*Roll'    -(x*y/f)*Pitch'+((x^2)/f)*Yaw';
+  // v_r = -x*Roll'-f*Pitch' -((y^2)/f)*Pitch'+(x*y/f)*Yaw';
+  int outStep2 = outStep/sizeof(short);
+  int outOffset2 = outOffset/sizeof(short);
+  int blockX = get_group_id(0);
+  int blockY = get_group_id(1);
+  int blockNumX = get_num_groups(0);
+  int blockNumY = get_num_groups(1);
+  int threadX = get_local_id(0);
+  int threadY = get_local_id(1);
+  int threadNumX = get_local_size(0);
+  int threadNumY = get_local_size(1);
+
+  int currIndexOutput = mad24(blockY,outStep2,blockX+outOffset2);
+  int currIndexCenter = mad24(blockY,inStep,blockX);
+  int currIndexSurr;
+
+  float focalDistEffective = focalDist/(float)(outputFlowFieldSize-outputFlowFieldOverlay);
+  float cxEffective = cx/(float)(outputFlowFieldSize-outputFlowFieldOverlay);
+  float cyEffective = cy/(float)(outputFlowFieldSize-outputFlowFieldOverlay);
+  float xEffective = (float)blockx - cxEffective;
+  float yEffective = (float)blockY - cyEffective;
+  
+
+  float teleportation;
+  int diffNum = abs(inNum[currIndexCenter]-prevNum[currIndexCenter]);
+  if (
+      (
+       (inNum[currIndexCenter]<telepThreshold) !=
+       (prevNum[currIndexCenter]<telepThreshold)
+      ) &&
+      (diffNum > telepThreshold)
+     ){
+    teleportation =
+      (diffNum)/((float)((inNum[currIndexCenter]>prevNum[currIndexCenter])?inNum[currIndexCenter]:prevNum[currIndexCenter]));
+  }
+  else {
+    teleportation = 0.0;
+  }
+
+
+
+    /* int diffNum = abs(inNum[currIndexCenter]-prevNum[currIndexCenter]); */
+    /* if (diffNum > minPointsThreshold) */
+    /*   teleportation = telepWeight*(diffNum)/(float)(inNum[currIndexCenter]>prevNum[currIndexCenter]?inNum[currIndexCenter]:prevNum[currIndexCenter]); */
+    /* else */
+    /*   teleportation = 0; */
+
+
+
+  if (inNum[currIndexCenter] < minPointsThreshold) {
+    outA[currIndexOutput] = trustMultiplierMemory*prevA[currIndexOutput]+telepWeight*teleportation;
+    outB[currIndexOutput] = 0;
+    outC[currIndexOutput] = 0;
+    return;
+  }
+
+
+  //expected rotational vectors in a rigid scene
+   
+  float u_r =  (focalDistEffective*YawRate) + (yEffective*RollRate)   - ((xEffective*yEffective/focalDistEffective)*PitchRate) + ((xEffective*xEffective/focalDistEffective)*YawRate);
+  float v_r = (-xEffective*RollRate) - (focalDistEffective*PitchRate) - ((yEffective*yEffective/focalDistEffective)*Pitchrate) + ((xEffective*yEffective/focalDistEffective)*YawRate);
+  
+
+
+  float avgOutX = 0;
+  float avgOutY = 0;
+  int cntOut = 0;
+  float avgInX = inX[currIndexCenter]/(float)inNum[currIndexCenter] - u_r;
+  float avgInY = inY[currIndexCenter]/(float)inNum[currIndexCenter] - v_r;
+
+  for (int j = -surroundRadius; j <= surroundRadius; j++) {
+    for (int i = -surroundRadius; i <= surroundRadius; i++) {
+      if ((i!=0)||(j!=0)){
+        int X = blockX+i;
+        int Y = blockY+j;
+        if ( (X<0) || (X>=blockNumX) || (Y<0) )
+          continue;
+        if ( (Y>=blockNumY) )
+          break;
+        currIndexSurr = mad24(Y,inStep,X);
+        if (inNum[currIndexSurr] != 0){
+          avgOutX += inX[currIndexSurr]; 
+          avgOutY += inY[currIndexSurr]; 
+          cntOut += inNum[currIndexSurr];
+        }
+      }
+    }
+  }
+
+  if (cntOut == 0) {
+    avgOutX = 0;
+    avgOutY = 0;
+  }
+  else {
+    avgOutX = avgOutX/cntOut - u_r;
+    avgOutY = avgOutY/cntOut - u_r;
+  }
+
+  float lenOut = native_sqrt(avgOutX*avgOutX+avgOutY*avgOutY);
+  float lenIn  = native_sqrt(avgInX*avgInX  +avgInY*avgInY);
+  float lenDiff = fabs(lenOut - lenIn);
+  
+  float alphaDiff;
+  if ( (lenOut >= 1.0) && (lenIn >= 1.0) ) { 
+    float alphaOut  = atan2pi(avgOutX,avgOutY);
+    float alphaIn  = atan2pi(avgInX,avgInY);
+    alphaDiff = fabs(alphaOut - alphaIn);
+    alphaDiff = fmin(alphaDiff,2-alphaDiff);
+  }
+  else {
+    alphaDiff = 0;
+  }
+
+
+  float dx = avgOutX - avgInX;
+  float dy = avgOutY - avgInY;
+  int estimPrevCellX = blockX + (int)round(-avgInX/(float)(outputFlowFieldSize-outputFlowFieldOverlay));
+  int estimPrevCellY = blockY + (int)round(-avgInY/(float)(outputFlowFieldSize-outputFlowFieldOverlay));
+  int estimPrevCellIndex = mad24(estimPrevCellY,outStep2,estimPrevCellX);
+
+
+
+  float trustCount = inNum[currIndexCenter]*trustMultiplierCount;
+//  float Memory = (prevA[estimPrevCellIndex]>3 ?
+//      fmin(prevA[estimPrevCellIndex]*trustMultiplierMemory,2):
+//      0.0f);
+  int activation = (int)(
+      (perFrame)*
+      (f)*
+      (trustCount)*
+      (alphaDiff>alphaDiffClose?
+        (float)(alphaDiff*alphaWeight):
+        (float)(lenDiff*lenWeight)
+        )
+      );
+  int prevActivation = prevA[estimPrevCellIndex];
+
+  activation = (int)(activation + trustMultiplierMemory*(prevActivation) + telepWeight*teleportation);
+
+  outA[currIndexOutput] = (short)activation;
+  outB[currIndexOutput] = (short)avgInX;
+  outC[currIndexOutput] = (short)avgInY;
+
 }
 
 __kernel void Tester(__global uchar* input,int step,int offset)

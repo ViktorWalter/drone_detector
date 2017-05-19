@@ -201,6 +201,15 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
       ROS_INFO("kernel BordersSurround failed to initialize!");
       return;
     }
+  k_BordersEgoMovement = cv::ocl::Kernel("BordersEgoMovement", *program,
+      cv::format( "-D maxCornersPerBlock=%d -D invalidFlowVal=%d "
+        "-D samplePointSize=%d -D outputFlowFieldSize=%d -D outputFlowFieldOverlay=%d "
+        "-D firstStepBlockSize=%d -D surroundRadius=%d "
+        ,maxCornersPerBlock,invalidFlow,samplePointSize,cellSize,cellOverlay,viableSD,surroundRadius));
+    if (k_BordersEgoMovement.empty()){
+      ROS_INFO("kernel BordersEgoMovement failed to initialize!");
+      return;
+    }
   k_Tester = cv::ocl::Kernel("Tester", *program,
       cv::format( "-D maxCornersPerBlock=%d -D invalidFlowVal=%d "
         "-D samplePointSize=%d -D outputFlowFieldSize=%d -D outputFlowFieldOverlay=%d "
@@ -221,7 +230,11 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     cv::Mat imCurr_t,
     cv::Mat imView_t,
     bool gui,
-    bool debug)
+    bool debug,
+    bool gotEgo,
+    float YawRate,
+    float PitchRate,
+    float RollRate)
 {
   
   currframe = clock();
@@ -510,27 +523,63 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
        
 
     float f_g = 1/dt;
+    float cx_g = (float)cx;
+    float cy_g = (float)cy;
+    float focal_g = (float)fx;
 
-    k_BordersSurround.args(
-        cv::ocl::KernelArg::PtrWriteOnly(activationMap_g),
-        cv::ocl::KernelArg::PtrReadOnly(activationMap_prev_g),
-        cv::ocl::KernelArg::PtrWriteOnly(averageX_g),
-        cv::ocl::KernelArg::WriteOnlyNoSize(averageY_g),
-        cellFlowX_g,
-        cellFlowY_g,
-        cellFlowNum_g,
-        cellFlowNum_prev_g,
-        gridC_width_g,
-        f_g
-        );
+    if (!gotEgo){
+      k_BordersSurround.args(
+          cv::ocl::KernelArg::PtrWriteOnly(activationMap_g),
+          cv::ocl::KernelArg::PtrReadOnly(activationMap_prev_g),
+          cv::ocl::KernelArg::PtrWriteOnly(averageX_g),
+          cv::ocl::KernelArg::WriteOnlyNoSize(averageY_g),
+          cellFlowX_g,
+          cellFlowY_g,
+          cellFlowNum_g,
+          cellFlowNum_prev_g,
+          gridC_width_g,
+          f_g
+          );
 
-    begin = clock();
+      begin = clock();
 
-    k_BordersSurround.run(2,globalC,blockC,true);
+      k_BordersSurround.run(2,globalC,blockC,true);
 
-    end = clock();
-    elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
-    ROS_INFO("BordersSurround took %f seconds",elapsed_secs);
+      end = clock();
+      elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
+      ROS_INFO("BordersSurround took %f seconds",elapsed_secs);
+    }
+    else {
+      float YawRate_g = YawRate;
+      float PitchRate_g = PitchRate;
+      float RollRate_g = RollRate;
+      k_BordersEgoMovement.args(
+          cv::ocl::KernelArg::PtrWriteOnly(activationMap_g),
+          cv::ocl::KernelArg::PtrReadOnly(activationMap_prev_g),
+          cv::ocl::KernelArg::PtrWriteOnly(averageX_g),
+          cv::ocl::KernelArg::WriteOnlyNoSize(averageY_g),
+          cellFlowX_g,
+          cellFlowY_g,
+          cellFlowNum_g,
+          cellFlowNum_prev_g,
+          gridC_width_g,
+          f_g,
+          focal_g,
+          cx_g,
+          cy_g,
+          YawRate_g,
+          PitchRate_g,
+          RollRate_g
+          );
+
+      begin = clock();
+
+      k_BordersEgoMovement.run(2,globalC,blockC,true);
+
+      end = clock();
+      elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
+      ROS_INFO("BordersEgoMovement took %f seconds",elapsed_secs);
+    }
     
   }     
 

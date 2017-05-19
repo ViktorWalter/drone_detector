@@ -28,7 +28,7 @@ private:
     cl_program prog_OptFlow;
     cl_kernel kernel_CornerPoints;
     cl_kernel kernel_OptFlow;
-    cv::ocl::Kernel k_OptFlow, k_CornerPoints, k_BordersSurround;
+    cv::ocl::Kernel k_OptFlow, k_CornerPoints, k_BordersSurround, k_BordersEgoMovement;
     cv::ocl::Kernel k_Tester;
     cv::ocl::Device device;
     cv::ocl::Context context;
@@ -99,19 +99,27 @@ private:
     }
 
 public:
-    SparseOptFlowOcl(int i_samplePointSize,
-                                         int i_scanRadius,
-                                         int i_stepSize,
-                                         int i_cx,int i_cy,int i_fx,int i_fy,
-                                         int i_k1,int i_k2,int i_k3,int i_p1,int i_p2,
-                                         bool i_storeVideo,
-                                         int i_cellSize,
-                                         int i_cellOverlay,
-                                         int i_surroundRadius
-                           );
+    SparseOptFlowOcl(
+        int i_samplePointSize,
+        int i_scanRadius,
+        int i_stepSize,
+        int i_cx,int i_cy,int i_fx,int i_fy,
+        int i_k1,int i_k2,int i_k3,int i_p1,int i_p2,
+        bool i_storeVideo,
+        int i_cellSize,
+        int i_cellOverlay,
+        int i_surroundRadius
+        );
 
     std::vector<cv::Point2f> processImage(
-        cv::Mat imCurr_t,cv::Mat imView_t,bool gui=true,bool debug=true);
+        cv::Mat imCurr_t,
+        cv::Mat imView_t,
+        bool gui=true,
+        bool debug=true,
+        bool gotEgo=true,
+        float YawRate=0.0,
+        float PitchRate=0.0,
+        float RollRate=0.0);
 
     void setImPrev(cv::Mat imPrev_t)
     {

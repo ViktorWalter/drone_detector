@@ -116,7 +116,7 @@ public:
         cv::Mat imView_t,
         bool gui=true,
         bool debug=true,
-        bool gotEgo=true,
+        bool gotEgo=false,
         float YawRate=0.0,
         float PitchRate=0.0,
         float RollRate=0.0);

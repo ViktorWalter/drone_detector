@@ -654,7 +654,7 @@ __kernel void BordersEgoMovement(
     float cy,
     float YawRate,
     float PitchRate,
-    float RollRate,
+    float RollRate
     )
 {
   // u_r = f*Yaw'+y*Roll'    -(x*y/f)*Pitch'+((x^2)/f)*Yaw';
@@ -677,7 +677,7 @@ __kernel void BordersEgoMovement(
   float focalDistEffective = focalDist/(float)(outputFlowFieldSize-outputFlowFieldOverlay);
   float cxEffective = cx/(float)(outputFlowFieldSize-outputFlowFieldOverlay);
   float cyEffective = cy/(float)(outputFlowFieldSize-outputFlowFieldOverlay);
-  float xEffective = (float)blockx - cxEffective;
+  float xEffective = (float)blockX - cxEffective;
   float yEffective = (float)blockY - cyEffective;
   
 
@@ -718,7 +718,7 @@ __kernel void BordersEgoMovement(
   //expected rotational vectors in a rigid scene
    
   float u_r =  (focalDistEffective*YawRate) + (yEffective*RollRate)   - ((xEffective*yEffective/focalDistEffective)*PitchRate) + ((xEffective*xEffective/focalDistEffective)*YawRate);
-  float v_r = (-xEffective*RollRate) - (focalDistEffective*PitchRate) - ((yEffective*yEffective/focalDistEffective)*Pitchrate) + ((xEffective*yEffective/focalDistEffective)*YawRate);
+  float v_r = (-xEffective*RollRate) - (focalDistEffective*PitchRate) - ((yEffective*yEffective/focalDistEffective)*PitchRate) + ((xEffective*yEffective/focalDistEffective)*YawRate);
   
 
 
@@ -786,7 +786,7 @@ __kernel void BordersEgoMovement(
 //      0.0f);
   int activation = (int)(
       (perFrame)*
-      (f)*
+      (freq)*
       (trustCount)*
       (alphaDiff>alphaDiffClose?
         (float)(alphaDiff*alphaWeight):

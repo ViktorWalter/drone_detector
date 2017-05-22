@@ -129,6 +129,7 @@ __kernel void CornerPoints(
             I[14] = i1__at(mad24(blockX,(blockSize),(i-3)),mad24(blockY,(blockSize),(j-1)));
             I[15] = i1__at(mad24(blockX,(blockSize),(i-2)),mad24(blockY,(blockSize),(j-2)));
             I[16] = i1__at(mad24(blockX,(blockSize),(i-1)),mad24(blockY,(blockSize),(j-3)));
+#pragma unroll 1
             for (int pix = 1; pix < 16; pix++) {
               if (sg == 1) {
                 if (I[pix]<(I[0]-FastThresh)) {
@@ -558,6 +559,7 @@ __kernel void BordersSurround(
   float avgInY = inY[currIndexCenter]/(float)inNum[currIndexCenter];
 
   for (int j = -surroundRadius; j <= surroundRadius; j++) {
+#pragma unroll 1    
     for (int i = -surroundRadius; i <= surroundRadius; i++) {
       if ((i!=0)||(j!=0)){
         int X = blockX+i;
@@ -729,6 +731,7 @@ __kernel void BordersEgoMovement(
   float avgInY = inY[currIndexCenter]/(float)inNum[currIndexCenter] - v_r;
 
   for (int j = -surroundRadius; j <= surroundRadius; j++) {
+#pragma unroll 1    
     for (int i = -surroundRadius; i <= surroundRadius; i++) {
       if ((i!=0)||(j!=0)){
         int X = blockX+i;

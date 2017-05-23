@@ -138,7 +138,7 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
          sizeof(cl_uint),
          &EfficientWGSize,
          NULL);
-    if (EfficientWGSize == 0) EfficientWGSize = 32;
+    if ((EfficientWGSize <= 0) || (EfficientWGSize > 128)) EfficientWGSize = 32;
   }
   else {
     ROS_INFO("Only NVIDIA and Intel cards are supported");
@@ -178,7 +178,7 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
   k_CornerPoints = cv::ocl::Kernel("CornerPoints", *program,
       cv::format( "-D maxCornersPerBlock=%d -D invalidFlowVal=%d "
         "-D samplePointSize=%d -D outputFlowFieldSize=%d -D outputFlowFieldOverlay=%d "
-        "-D firstStepBlockSize=%d -D surroundRadius=%d "
+        "-D firstStepBlockSize=%d -D surroundRadius=%d"
         ,maxCornersPerBlock,invalidFlow,samplePointSize,cellSize,cellOverlay,viableSD,surroundRadius));
     if (k_CornerPoints.empty()){
       ROS_INFO("kernel CornerPoints failed to initialize!");

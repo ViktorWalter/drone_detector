@@ -274,7 +274,9 @@ __kernel void OptFlowReduced(
 
   bool watchdog = false;
   int counter = 0;
-  
+
+
+#pragma unroll 1
   while ((blockShiftY <= shiftRadius)) {
     if (( blockShiftX > shiftRadius) || ( blockShiftY > shiftRadius) )
       break;

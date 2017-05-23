@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.1)
 project(drone_detector)
 
+set(CMAKE_BUILD_TYPE Debug)
+
 FILE(GLOB_RECURSE HEADER_FILES include *.h)
 FILE(GLOB_RECURSE OPENCL_FILES include *.cl)
 FILE(GLOB_RECURSE LAUNCHER_FILES include *.launch)
@@ -35,6 +37,7 @@ if (EXISTS /usr/local/include/opencv2/opencv.hpp)
 else()
   find_package(OpenCV REQUIRED HINTS /usr/local/lib)
 endif()
+message("OpenCV deps are (I/L):")
 message("${OpenCV_INCLUDE_DIRS} ${OpenCV_LIBRARIES}")
 
 if (EXISTS /usr/local/cuda/include/CL/cl.hpp)
@@ -90,7 +93,6 @@ catkin_package(
    DEPENDS Eigen
 )
 
-
 ###########
 ## Build ##
 ###########
@@ -108,7 +110,8 @@ include_directories(
 
 ## Declare a C++ library
 add_library(SparseOptFlowOcl src/SparseOptFlowOcl.cpp)
-target_link_libraries(SparseOptFlowOcl ${OpenCV_LIBRARIES} ${OpenCL_LIBRARIES} ${catkin_LIBRARIES})
+target_link_libraries(SparseOptFlowOcl 
+debug ${OpenCV_LIBRARIES} ${OpenCL_LIBRARIES} ${catkin_LIBRARIES})
 
 ## Declare a C++ executable
 add_executable(drone_detector_node src/drone_detector.cpp)

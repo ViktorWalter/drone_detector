@@ -40,9 +40,8 @@ cv::Mat ResizeToFitRectangle(cv::Mat& src, cv::Size size) {
 
 }
 
-SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
-    int i_scanRadius,
-    int i_stepSize,
+SparseOptFlowOcl::SparseOptFlowOcl(
+    int i_samplePointSize,
     int i_cx,int i_cy,int i_fx,int i_fy,
     int i_k1,int i_k2,int i_k3,int i_p1,int i_p2,
     bool i_storeVideo,
@@ -52,9 +51,7 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
 {
   initialized = false;
   first = true;
-  scanRadius = i_scanRadius;
   samplePointSize = i_samplePointSize;
-  stepSize = i_stepSize;
   cellSize = i_cellSize;
   cellOverlay = i_cellOverlay;
   surroundRadius = i_surroundRadius;
@@ -150,10 +147,6 @@ SparseOptFlowOcl::SparseOptFlowOcl(int i_samplePointSize,
   ROS_INFO("Viable SD:%d",viableSD);
   int viableSR = ((viableSD % 2)==1) ? ((viableSD-1)/2) : ((viableSD-2)/2);
 
-  scanBlock = (scanRadius <= viableSR ? (2*scanRadius+1) : viableSD);
-  ROS_INFO("Using scaning block of %d.",scanBlock);
-  if (scanRadius > viableSR)
-    ROS_INFO("This will require repetitions within threads.");
 
   FILE *program_handle;
   size_t program_size;
@@ -259,7 +252,6 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     return outvec;
   }
 
-  int scanDiameter = (2*scanRadius)+1;
   int blockszX = viableSD;
   int blockszY = viableSD;
 

@@ -105,17 +105,11 @@ public:
 
         private_node_handle.param("DEBUG", DEBUG, bool(false));
 
-        private_node_handle.param("method", method, int(0));
-        /* methods:
-         *      0 -         */
 
 
-        private_node_handle.param("ScanRadius", scanRadius, int(8));
-        private_node_handle.param("FrameSize", frameSize, int(64));
         private_node_handle.param("SamplePointSize", samplePointSize, int(8));
 
 
-        private_node_handle.param("StepSize", stepSize, int(0));
 
         private_node_handle.param("gui", gui, bool(false));
         private_node_handle.param("publish", publish, bool(true));
@@ -139,12 +133,6 @@ public:
 
         private_node_handle.getParam("image_width", expectedWidth);
 
-        if ((frameSize % 2) == 1)
-        {
-            frameSize--;
-        }
-        scanDiameter = (2*scanRadius+1);
-        scanCount = (scanDiameter*scanDiameter);
 
 
         private_node_handle.param("cameraRotated", cameraRotated, bool(true));
@@ -155,15 +143,11 @@ public:
         gotCamInfo = false;
         ros::spinOnce();
 
-        imPrev = cv::Mat(frameSize,frameSize,CV_8UC1);
-        imPrev = cv::Scalar(0);
 
         begin = ros::Time::now();
 
           bmm = new SparseOptFlowOcl(
               samplePointSize,
-              scanRadius,
-              stepSize,
               cx,
               cy,
               fx,
@@ -319,10 +303,6 @@ private:
 //        {
 //            imCenterX = imOrigScaled.size().width / 2;
 //            imCenterY = imOrigScaled.size().height / 2;
-//            xi = imCenterX - (frameSize/2);
-//            yi = imCenterY - (frameSize/2);
-//            frameRect = cv::Rect(xi,yi,frameSize,frameSize);
-//            midPoint = cv::Point2i((frameSize/2),(frameSize/2));
 //        }
 //
 //        //ROS_INFO("Here 2");
@@ -387,13 +367,8 @@ private:
     int expectedWidth;
     int ScaleFactor;
 
-    int frameSize;
     int samplePointSize;
 
-    int scanRadius;
-    int scanDiameter;
-    int scanCount;
-    int stepSize;
     int cellSize;
     int cellOverlay;
     int surroundRadius;
@@ -403,7 +378,6 @@ private:
     bool gotCamInfo;
 
     bool gui, publish, useCuda, useOdom;
-    int method;
 
     int numberOfBins;
 

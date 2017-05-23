@@ -66,9 +66,6 @@ private:
     cl_mem exclusions_g;
 
     int samplePointSize;
-    int scanRadius;
-    int stepSize;
-    int scanBlock;
     int viableSD;
     int cellSize;
     int cellOverlay;
@@ -101,8 +98,6 @@ private:
 public:
     SparseOptFlowOcl(
         int i_samplePointSize,
-        int i_scanRadius,
-        int i_stepSize,
         int i_cx,int i_cy,int i_fx,int i_fy,
         int i_k1,int i_k2,int i_k3,int i_p1,int i_p2,
         bool i_storeVideo,

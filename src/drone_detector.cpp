@@ -9,7 +9,7 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/core/core.hpp>
 #include <image_transport/image_transport.h>
-#include <sensor_msgs/Range.h>
+#include <sensor_msgs/Imu.h>
 #include <nav_msgs/Odometry.h>
 #include <geometry_msgs/Twist.h>
 #include <sensor_msgs/CameraInfo.h>
@@ -116,11 +116,16 @@ public:
 
         private_node_handle.param("useOdom",useOdom,bool(false));
 
+        if (useOdom){
+          ROS_INFO("UseOdom? %s",useOdom?"true":"false");
+          TiltSubscriber = private_node_handle.subscribe("/uav1/mavros/imu/data", 1, &DroneDetector::TiltCallback, this);
+        }
+
+
 
         bool ImgCompressed;
         private_node_handle.param("CameraImageCompressed", ImgCompressed, bool(false));
 
-        private_node_handle.param("ScaleFactor", ScaleFactor, int(1));
 
         private_node_handle.param("silentDebug", silent_debug, bool(false));
 
@@ -204,15 +209,34 @@ private:
         //cv::resize(imCurr_raw,imCurr,cv::Size(320,240));
         //cv::imshow("vw",imCurr);
 
-       bmm->processImage(
-           imCurr,
-           imCurr_raw
-           );
+        if (useOdom)
+          bmm->processImage(
+              imCurr,
+              imCurr_raw,
+              true,
+              true,
+              true,
+              yawRate,
+              pitchRate,
+              rollRate
+              );
+        else
+          bmm->processImage(
+              imCurr,
+              imCurr_raw
+              );
 
         key = cv::waitKey(10);
       }
     }
 
+
+    void TiltCallback(const sensor_msgs::ImuConstPtr& imu_msg){
+      yawRate = imu_msg->angular_velocity.z;
+      pitchRate = imu_msg->angular_velocity.y;
+      rollRate = imu_msg->angular_velocity.x;
+      ROS_INFO("Y:%f, P:%f, R:%f", yawRate, pitchRate, rollRate);
+    }
 
 
     void ProcessCompressed(const sensor_msgs::CompressedImageConstPtr& image_msg)
@@ -289,11 +313,6 @@ private:
 
 
         // Scaling
-//        if (ScaleFactor != 1){
-//            cv::resize(image->image,imOrigScaled,cv::Size(image->image.size().width/ScaleFactor,image->image.size().height/ScaleFactor));
-//        }else{
-//            imOrigScaled = image->image.clone();
-//        }
 
         //ROS_INFO("Here 1");
 
@@ -330,15 +349,10 @@ private:
 
     ros::Time RangeRecTime;
 
-    ros::Subscriber ImageSubscriber;
-    ros::Subscriber RangeSubscriber;
-    ros::Publisher VelocityPublisher;
-    ros::Publisher VelocitySDPublisher;
-    ros::Publisher VelocityRawPublisher;
-    ros::Publisher MaxAllowedVelocityPublisher;
 
     ros::Subscriber CamInfoSubscriber;
     ros::Subscriber TiltSubscriber;
+    ros::Subscriber ImageSubscriber;
 
 
     cv::Mat imOrigScaled;
@@ -365,7 +379,6 @@ private:
     double gamma; // rotation of camera in the helicopter frame (positive)
 
     int expectedWidth;
-    int ScaleFactor;
 
     int samplePointSize;
 
@@ -388,12 +401,7 @@ private:
     float RansacThresholdRadSq;
     bool Allsac;
 
-    // Ranger & odom vars
-    double currentRange;
-    double trueRange;
-    double prevRange;
-    double Zvelocity;
-    double roll, pitch, yaw;
+    double rollRate, pitchRate, yawRate;
 
 
     double max_px_speed_t;
@@ -401,9 +409,7 @@ private:
     float maxAccel;
     bool checkAccel;
 
-    cv::Point2d angVel;
 
-    cv::Point2f odomSpeed;
     ros::Time odomSpeedTime;
     float speed_noise;
 

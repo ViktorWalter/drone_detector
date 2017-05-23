@@ -167,7 +167,6 @@ SparseOptFlowOcl::SparseOptFlowOcl(
   program = new cv::ocl::ProgramSource(kernelSource);
 
   cv::String ErrMsg;
-  ROS_INFO("Here CP");
   k_CornerPoints = cv::ocl::Kernel("CornerPoints", *program,
       cv::format( "-D maxCornersPerBlock=%d -D invalidFlowVal=%d "
         "-D samplePointSize=%d -D outputFlowFieldSize=%d -D outputFlowFieldOverlay=%d "
@@ -177,7 +176,6 @@ SparseOptFlowOcl::SparseOptFlowOcl(
       ROS_INFO("kernel CornerPoints failed to initialize!");
       return;
     }
-  ROS_INFO("Here OF");
   k_OptFlow = cv::ocl::Kernel("OptFlowReduced", *program,
       cv::format( "-D maxCornersPerBlock=%d -D invalidFlowVal=%d "
         "-D samplePointSize=%d -D outputFlowFieldSize=%d -D outputFlowFieldOverlay=%d "
@@ -187,7 +185,6 @@ SparseOptFlowOcl::SparseOptFlowOcl(
       ROS_INFO("kernel OptFlowReduced failed to initialize!");
       return;
     }
-  ROS_INFO("Here BS");
   k_BordersSurround = cv::ocl::Kernel("BordersSurround", *program,
       cv::format( "-D maxCornersPerBlock=%d -D invalidFlowVal=%d "
         "-D samplePointSize=%d -D outputFlowFieldSize=%d -D outputFlowFieldOverlay=%d "
@@ -197,7 +194,6 @@ SparseOptFlowOcl::SparseOptFlowOcl(
       ROS_INFO("kernel BordersSurround failed to initialize!");
       return;
     }
-  ROS_INFO("Here BE");
   k_BordersEgoMovement = cv::ocl::Kernel("BordersEgoMovement", *program,
       cv::format( "-D maxCornersPerBlock=%d -D invalidFlowVal=%d "
         "-D samplePointSize=%d -D outputFlowFieldSize=%d -D outputFlowFieldOverlay=%d "
@@ -207,7 +203,6 @@ SparseOptFlowOcl::SparseOptFlowOcl(
       ROS_INFO("kernel BordersEgoMovement failed to initialize!");
       return;
     }
-  ROS_INFO("Here TS");
   k_Tester = cv::ocl::Kernel("Tester", *program,
       cv::format( "-D maxCornersPerBlock=%d -D invalidFlowVal=%d "
         "-D samplePointSize=%d -D outputFlowFieldSize=%d -D outputFlowFieldOverlay=%d "
@@ -443,7 +438,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
       NULL,
       NULL);
 
-  ROS_INFO("Number of found points for next phase: %d",foundPtsSize);
+  /* ROS_INFO("Number of found points for next phase: %d",foundPtsSize); */
 
   if ( (foundPtsSize > 0) && (!first) && (true))
   {
@@ -516,7 +511,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
 
     clock_t end = clock();
     double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
-    ROS_INFO("OptFlow took %f seconds",elapsed_secs);
+    /* ROS_INFO("OptFlow took %f seconds",elapsed_secs); */
        
 
     float freq_g = 1/dt;
@@ -544,7 +539,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
 
       end = clock();
       elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
-      ROS_INFO("BordersSurround took %f seconds",elapsed_secs);
+      /* ROS_INFO("BordersSurround took %f seconds",elapsed_secs); */
     }
     else {
       float YawRate_g = YawRate;
@@ -575,7 +570,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
 
       end = clock();
       elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
-      ROS_INFO("BordersEgoMovement took %f seconds",elapsed_secs);
+      /* ROS_INFO("BordersEgoMovement took %f seconds",elapsed_secs); */
     }
     
   }     
@@ -861,12 +856,12 @@ void SparseOptFlowOcl::drawWindows(std::vector<AttentionWindow> wnds)
     cv::Point2i corner1 = cv::Point2i(rect.x,rect.y);
     cv::Point2i corner2 = cv::Point2i(rect.x+rect.width,rect.y+rect.height);
 
-    ROS_INFO("x:%d, y:0, w:%d, h:%d; W:%d, H:%d",baseWindowSize*i, rect.width, rect.height, imShowWindows.cols, imShowWindows.rows);
+    /* ROS_INFO("x:%d, y:0, w:%d, h:%d; W:%d, H:%d",baseWindowSize*i, rect.width, rect.height, imShowWindows.cols, imShowWindows.rows); */
     cv::rectangle(imView, corner1,corner2, cv::Scalar(255,0,0), 2);
     /* char wndname[10]; */
     /* std::sprintf(wndname,"cv_fl_%d",i); */
     imView(rect).copyTo(imShowWindows(cv::Rect(baseWindowSize*i,0,rect.width,rect.height)));
   }
-  cv::imshow("cl_fl_windows", imShowWindows);
+  cv::imshow("cv_fl_windows", imShowWindows);
 }
 

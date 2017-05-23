@@ -17,6 +17,8 @@
 
   <group ns="$(arg uav_name)">
 
+    <include file="$(find mbzirc_main)/launch/mavros_f550.launch" />
+
     <node name="drone_detector" pkg="drone_detector" type="drone_detector_node" output="screen" >
       <!-- launch-prefix="xterm -e gdb -args" -->
       <param name="DEBUG"		type="bool" value="$(arg DEBUG)"/> 
@@ -29,14 +31,13 @@
       <param name="cellOverlay"	type="int" value="$(arg cellOverlay)"/>
       <param name="surroundRadius"	type="int" value="$(arg surroundRadius)"/>
       <param name="publish"         type="bool" value="$(arg publish)"/>
-      <param name="RangerDataPath"    type="string" value="/$(arg uav_name)/terarangerone/range"/>
       <param name="CameraImageCompressed"    type="bool" value="false"/>
       <param name="cameraRotated"    type="bool" value="$(arg cameraRotated)"/>
       <param name="useOdom"           type="bool" value="$(arg useOdom)"/>
       <param name="camNum"           type="int" value="$(arg camNum)"/>
 
-
-
+      <remap from="~imu" to="/uav1/mavros/imu/data"/>
     </node>
+
   </group>
 </launch>

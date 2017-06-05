@@ -492,9 +492,9 @@ __kernel void OptFlowReduced(
 
 __kernel void BordersSurround(
     __global ushort* outA,
-    __global short* prevA,
-    __global short* outB,
-    __global short* outC,
+    __global ushort* prevA,
+    __global short* outX,
+    __global short* outY,
     int outStep,
     int outOffset,
     __global int* inX,
@@ -549,8 +549,8 @@ __kernel void BordersSurround(
 
   if (inNum[currIndexCenter] < minPointsThreshold) {
     outA[currIndexOutput] = trustMultiplierMemory*prevA[currIndexOutput]+telepWeight*teleportation;
-    outB[currIndexOutput] = 0;
-    outC[currIndexOutput] = 0;
+    outX[currIndexOutput] = 0;
+    outY[currIndexOutput] = 0;
     return;
   }
 
@@ -630,9 +630,9 @@ __kernel void BordersSurround(
 
   activation = (int)(activation + trustMultiplierMemory*(prevActivation) + telepWeight*teleportation);
 
-  outA[currIndexOutput] = (short)activation;
-  outB[currIndexOutput] = (short)avgInX;
-  outC[currIndexOutput] = (short)avgInY;
+  outA[currIndexOutput] = (ushort)activation;
+  outX[currIndexOutput] = (short)avgInX;
+  outY[currIndexOutput] = (short)avgInY;
 }
 
 __kernel void BordersGlobal(
@@ -642,9 +642,11 @@ __kernel void BordersGlobal(
 
 __kernel void BordersEgoMovement(
     __global ushort* outA,
-    __global short* prevA,
-    __global short* outB,
-    __global short* outC,
+    __global ushort* prevA,
+    __global short* outX,
+    __global short* outY,
+    __global short* egoX,
+    __global short* egoY,
     int outStep,
     int outOffset,
     __global int* inX,
@@ -708,29 +710,39 @@ __kernel void BordersEgoMovement(
     /*   teleportation = telepWeight*(diffNum)/(float)(inNum[currIndexCenter]>prevNum[currIndexCenter]?inNum[currIndexCenter]:prevNum[currIndexCenter]); */
     /* else */
     /*   teleportation = 0; */
+  float u_r =  (focalDistEffective*YawRate) + (yEffective*RollRate)   - ((xEffective*yEffective/focalDistEffective)*PitchRate) + ((xEffective*xEffective/focalDistEffective)*YawRate);
+  float v_r = (-xEffective*RollRate) - (focalDistEffective*PitchRate) - ((yEffective*yEffective/focalDistEffective)*PitchRate) + ((xEffective*yEffective/focalDistEffective)*YawRate);
+
+  /* if ((blockX == 10) && (blockY == 5)) */
+  /* printf("|u:%f;v:%f|\n",u_r,v_r); */
+  /* printf("|xe:%f;ye:%f;fe:%f|\n",xEffective,yEffective, focalDistEffective); */
+  /* printf("|y:%f\tp:%f\tr:%f|\n",YawRate,PitchRate,RollRate); */
+  /* printf("|u:%f;v:%f|\n",u_r,v_r); */
+  egoX[currIndexOutput] = (short)(u_r);
+  egoY[currIndexOutput] = (short)(v_r);
 
 
 
   if (inNum[currIndexCenter] < minPointsThreshold) {
     outA[currIndexOutput] = trustMultiplierMemory*prevA[currIndexOutput]+telepWeight*teleportation;
-    outB[currIndexOutput] = 0;
-    outC[currIndexOutput] = 0;
+    outX[currIndexOutput] = 0;
+    outY[currIndexOutput] = 0;
     return;
   }
 
 
   //expected rotational vectors in a rigid scene
    
-  float u_r =  (focalDistEffective*YawRate) + (yEffective*RollRate)   - ((xEffective*yEffective/focalDistEffective)*PitchRate) + ((xEffective*xEffective/focalDistEffective)*YawRate);
-  float v_r = (-xEffective*RollRate) - (focalDistEffective*PitchRate) - ((yEffective*yEffective/focalDistEffective)*PitchRate) + ((xEffective*yEffective/focalDistEffective)*YawRate);
   
 
 
   float avgOutX = 0;
   float avgOutY = 0;
   int cntOut = 0;
-  float avgInX = inX[currIndexCenter]/(float)inNum[currIndexCenter] - u_r;
-  float avgInY = inY[currIndexCenter]/(float)inNum[currIndexCenter] - v_r;
+  /* float avgInX = inX[currIndexCenter]/(float)inNum[currIndexCenter] - u_r; */
+  /* float avgInY = inY[currIndexCenter]/(float)inNum[currIndexCenter] - v_r; */
+  float avgInX = inX[currIndexCenter]/(float)inNum[currIndexCenter] ;
+  float avgInY = inY[currIndexCenter]/(float)inNum[currIndexCenter] ;
 
   for (int j = -surroundRadius; j <= surroundRadius; j++) {
 #pragma unroll 1    
@@ -802,9 +814,9 @@ __kernel void BordersEgoMovement(
 
   activation = (int)(activation + trustMultiplierMemory*(prevActivation) + telepWeight*teleportation);
 
-  outA[currIndexOutput] = (short)activation;
-  outB[currIndexOutput] = (short)avgInX;
-  outC[currIndexOutput] = (short)avgInY;
+  outA[currIndexOutput] = (ushort)activation;
+  outX[currIndexOutput] = (short)avgInX;
+  outY[currIndexOutput] = (short)avgInY;
 
 }
 

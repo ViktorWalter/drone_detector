@@ -14,7 +14,8 @@
 #include <geometry_msgs/Twist.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <std_msgs/Float32.h>
-using namespace std;
+#include <thread>
+#include <mutex>
 
 #include "drone_detector/SparseOptFlowOcl.h"
 //#include <opencv2/gpuoptflow.hpp>
@@ -22,29 +23,27 @@ using namespace std;
 //#include <opencv2/gpuimgproc.hpp>
 //#include <time.h>
 
-
-
 namespace enc = sensor_msgs::image_encodings;
 
 struct PointValue
 {
-    int value;
-    cv::Point2i location;
+  int value;
+  cv::Point2i location;
 };
 
 
 
 class DroneDetector
 {
-public:
+  public:
     DroneDetector(ros::NodeHandle& node)
     {
-        ros::NodeHandle private_node_handle("~");
+      ros::NodeHandle private_node_handle("~");
 
-        private_node_handle.param("FromBag", FromBag, bool(true));
-        private_node_handle.param("Flip", Flip, bool(false));
-        private_node_handle.param("FromVideo", FromVideo, bool(true));
-        private_node_handle.param("VideoNumber", VideoNumber, int(1));
+      private_node_handle.param("FromBag", FromBag, bool(true));
+      private_node_handle.param("Flip", Flip, bool(false));
+      private_node_handle.param("FromVideo", FromVideo, bool(true));
+      private_node_handle.param("VideoNumber", VideoNumber, int(1));
       switch (VideoNumber) {
         case 1:
           VideoPath << SourceDir << "videos/UAVfirst.MP4";
@@ -68,12 +67,12 @@ public:
       } 
 
       if (MaskPathHard.empty()){
-          MaskPathHard = MaskPath.str();
+        MaskPathHard = MaskPath.str();
       }
       ROS_INFO("VideoPath = %s",VideoPath.str().c_str());
       ROS_INFO("MaskPath = %s",MaskPathHard.c_str());
-      
-        private_node_handle.param("camNum", camNum, int(0));
+
+      private_node_handle.param("camNum", camNum, int(0));
 
       if (FromVideo){
         vc.open(VideoPath.str());
@@ -95,162 +94,199 @@ public:
           ROS_INFO("camera failed to start");
         }
       }
+      
+      //      cv::Mat testmat;
 
+      private_node_handle.param("cellSize", cellSize, int(32));
+      private_node_handle.param("cellOverlay", cellOverlay, int(8));
+      private_node_handle.param("surroundRadius", surroundRadius, int(4));
 
-//      cv::Mat testmat;
-
-        private_node_handle.param("cellSize", cellSize, int(32));
-        private_node_handle.param("cellOverlay", cellOverlay, int(8));
-        private_node_handle.param("surroundRadius", surroundRadius, int(4));
-
-        private_node_handle.param("DEBUG", DEBUG, bool(false));
-
-
-
-        private_node_handle.param("SamplePointSize", samplePointSize, int(8));
+      private_node_handle.param("DEBUG", DEBUG, bool(false));
 
 
 
-        private_node_handle.param("gui", gui, bool(false));
-        private_node_handle.param("publish", publish, bool(true));
+      private_node_handle.param("SamplePointSize", samplePointSize, int(8));
 
-        private_node_handle.param("useOdom",useOdom,bool(false));
 
-        if (useOdom){
-          ROS_INFO("UseOdom? %s",useOdom?"true":"false");
-          TiltSubscriber = private_node_handle.subscribe("/uav1/mavros/imu/data", 1, &DroneDetector::TiltCallback, this);
+
+      private_node_handle.param("gui", gui, bool(false));
+      private_node_handle.param("publish", publish, bool(true));
+
+      private_node_handle.param("useOdom",useOdom,bool(false));
+
+      ROS_INFO("UseOdom? %s",useOdom?"true":"false");
+      if (useOdom){
+        TiltSubscriber = private_node_handle.subscribe("imu", 1, &DroneDetector::TiltCallback, this, ros::TransportHints().tcpNoDelay());
+      }
+
+      bool ImgCompressed;
+      private_node_handle.param("CameraImageCompressed", ImgCompressed, bool(false));
+
+
+      private_node_handle.param("silentDebug", silent_debug, bool(false));
+
+
+      private_node_handle.param("storeVideo", storeVideo, bool(false));
+
+
+
+
+
+      std::vector<double> camMat;
+      private_node_handle.getParam("camera_matrix/data", camMat);
+      fx = camMat[0];
+      cx = camMat[2];
+      fy = camMat[4];
+      cy = camMat[5];
+      std::vector<double> distCoeffs;
+      private_node_handle.getParam("distortion_coefficients/data",distCoeffs);
+      k1 = distCoeffs[0];
+      k2 = distCoeffs[1];
+      k3 = distCoeffs[4];
+      p1 = distCoeffs[2];
+      p2 = distCoeffs[3];
+
+
+      private_node_handle.param("cameraRotated", cameraRotated, bool(true));
+      //private_node_handle.getParam("camera_rotation_matrix/data", camRot);
+      private_node_handle.getParam("alpha", gamma);
+
+
+      gotCamInfo = false;
+
+      ros::Time::waitForValid();
+      begin = ros::Time::now();
+      
+
+      bmm = new SparseOptFlowOcl(
+          samplePointSize,
+          cx,
+          cy,
+          fx,
+          fy,
+          k1,
+          k2,
+          k3,
+          p1,
+          p2,
+          false,
+          cellSize,
+          cellOverlay,
+          surroundRadius);
+
+      if (FromBag){
+        stopped = false;
+        if (ImgCompressed){
+          ImageSubscriber = node.subscribe("camera", 1, &DroneDetector::ProcessCompressed, this);
+        }else{
+          ImageSubscriber = node.subscribe("camera", 1, &DroneDetector::ProcessRaw, this);
         }
-
-
-
-        bool ImgCompressed;
-        private_node_handle.param("CameraImageCompressed", ImgCompressed, bool(false));
-
-
-        private_node_handle.param("silentDebug", silent_debug, bool(false));
-
-
-        private_node_handle.param("storeVideo", storeVideo, bool(false));
-
-
-
-
-
-        private_node_handle.getParam("image_width", expectedWidth);
-
-
-
-        private_node_handle.param("cameraRotated", cameraRotated, bool(true));
-        //private_node_handle.getParam("camera_rotation_matrix/data", camRot);
-        private_node_handle.getParam("alpha", gamma);
-
-
-        gotCamInfo = false;
-        ros::spinOnce();
-
-
-        begin = ros::Time::now();
-
-          bmm = new SparseOptFlowOcl(
-              samplePointSize,
-              cx,
-              cy,
-              fx,
-              fy,
-              k1,
-              k2,
-              k3,
-              p1,
-              p2,
-              false,
-              cellSize,
-              cellOverlay,
-              surroundRadius);
-
-        if (FromBag){
-          stopped = false;
-          if (ImgCompressed){
-            ImageSubscriber = node.subscribe("camera", 1, &DroneDetector::ProcessCompressed, this);
-          }else{
-            ImageSubscriber = node.subscribe("camera", 1, &DroneDetector::ProcessRaw, this);
-          }
+      }
+      else{
+        if (bmm->initialized){
+          main_thread = std::thread(&DroneDetector::ProcessVideoInput, this);
         }
-        else{
-          if (bmm->initialized)
-            ProcessVideoInput();
-        }
+      }
     }
 
     ~DroneDetector(){
 
     }
 
-private:
+  private:
 
     void ProcessVideoInput()
     {
       cv::namedWindow("cv_Main", CV_GUI_NORMAL|CV_WINDOW_AUTOSIZE); 
       cv::RNG rng(12345);
-      
+
       cv::Mat mask = cv::imread(MaskPathHard.c_str());
 
       cv::Mat imCurr_raw;
 
+      ros::Rate frame_rate(50);
+
+      double yaw_local;
+      double pitch_local;
+      double roll_local;
+
       int key = -1;
-      while (key != 13)
+      while (key != 13 && ros::ok())
       {
+
+        /* ROS_INFO_THROTTLE(1, "The thread is running..."); */
+
         imCurr = cv::Scalar(0,0,0);
         vc.read(imCurr_raw);
-       // cv::imwrite(MaskPath.str().c_str(),imCurr_raw);
-       
+        // cv::imwrite(MaskPath.str().c_str(),imCurr_raw);
 
-        imCurr_raw.copyTo(imCurr,mask);
+        imCurr_raw.copyTo(imCurr, mask);
         //imCurr_raw.copyTo(imCurr);
         //cv::resize(imCurr_raw,imCurr,cv::Size(320,240));
         //cv::imshow("vw",imCurr);
+        //
 
-        if (useOdom)
+        if (useOdom) {
+
+          mutex_imu.lock();
+          {
+            yaw_local = yawRate;
+            pitch_local = pitchRate;
+            roll_local = rollRate;
+          }
+          mutex_imu.unlock();
+
+          /* ROS_INFO("y:%f\tp:%f\tr:%f",yaw_local,pitch_local,roll_local); */
+
           bmm->processImage(
               imCurr,
               imCurr_raw,
               true,
               true,
               true,
-              yawRate,
-              pitchRate,
-              rollRate
+              yaw_local,
+              pitch_local,
+              roll_local
               );
-        else
+
+        } else {
+
           bmm->processImage(
               imCurr,
               imCurr_raw
               );
+        }
 
-        key = cv::waitKey(10);
+          key = cv::waitKey(10);
+          frame_rate.sleep();
+        
       }
     }
 
-
     void TiltCallback(const sensor_msgs::ImuConstPtr& imu_msg){
-      yawRate = imu_msg->angular_velocity.z;
-      pitchRate = imu_msg->angular_velocity.y;
-      rollRate = imu_msg->angular_velocity.x;
-      ROS_INFO("Y:%f, P:%f, R:%f", yawRate, pitchRate, rollRate);
-    }
+      mutex_imu.lock();
+      {
+        yawRate = imu_msg->angular_velocity.z;
+        pitchRate = imu_msg->angular_velocity.y;
+        rollRate = imu_msg->angular_velocity.x;
+      }
+      mutex_imu.unlock();
 
+      /* ROS_INFO( "Y:%f, P:%f, R:%f", yawRate, pitchRate, rollRate); */
+    }
 
     void ProcessCompressed(const sensor_msgs::CompressedImageConstPtr& image_msg)
     {
-        cv_bridge::CvImagePtr image;
-        image = cv_bridge::toCvCopy(image_msg, enc::BGR8);
-        ProcessSingleImage(image);
+      cv_bridge::CvImagePtr image;
+      image = cv_bridge::toCvCopy(image_msg, enc::BGR8);
+      ProcessSingleImage(image);
     }
 
     void ProcessRaw(const sensor_msgs::ImageConstPtr& image_msg)
     {
-        cv_bridge::CvImagePtr image;
-        image = cv_bridge::toCvCopy(image_msg, enc::BGR8);
-        ProcessSingleImage(image);
+      cv_bridge::CvImagePtr image;
+      image = cv_bridge::toCvCopy(image_msg, enc::BGR8);
+      ProcessSingleImage(image);
     }
 
 
@@ -259,79 +295,72 @@ private:
       if (stopped) return;
       int key = -1;
 
-        // First things first
+      // First things first
       if (first)
       {
 
-            if(DEBUG){
-                ROS_INFO("Source img: %dx%d", image->image.cols, image->image.rows);
-            }
-            cv::namedWindow("cv_Main", CV_GUI_NORMAL|CV_WINDOW_AUTOSIZE); 
-
-            first = false;
+        if(DEBUG){
+          ROS_INFO("Source img: %dx%d", image->image.cols, image->image.rows);
         }
+        cv::namedWindow("cv_Main", CV_GUI_NORMAL|CV_WINDOW_AUTOSIZE); 
+
+        first = false;
+      }
       cv::Mat localImg_raw, localImg;
-        if (Flip){
-          cv::flip(image->image,localImg_raw,-1);
-        }
-        else
-          image->image.copyTo(localImg_raw);
+      if (Flip){
+        cv::flip(image->image,localImg_raw,-1);
+      }
+      else
+        image->image.copyTo(localImg_raw);
 
-        cv::Mat mask = cv::imread(MaskPathHard.c_str());
-        localImg_raw.copyTo(localImg,mask);
+      cv::Mat mask = cv::imread(MaskPathHard.c_str());
+      localImg_raw.copyTo(localImg,mask);
 
-        bmm->processImage(
-            localImg
-            ,
-            localImg_raw
-            );
-        /* cv::imshow("fthis",image->image); */
-
-
-
-
-
-
-
-        key = cv::waitKey(10);
+      bmm->processImage(
+          localImg
+          ,
+          localImg_raw
+          );
+      /* cv::imshow("fthis",image->image); */
+      key = cv::waitKey(10);
 
       if (key == 13)
         stopped = true;
 
-//
-//        if(!gotCamInfo){
-//            ROS_WARN("Camera info didn't arrive yet! We don't have focus lenght coefficients. Can't publish optic flow.");
-//            return;
-//        }
+      //
+      //        if(!gotCamInfo){
+      //            ROS_WARN("Camera info didn't arrive yet! We don't have focus lenght coefficients. Can't publish optic flow.");
+      //            return;
+      //        }
 
-        // Print out frequency
-//        ros::Duration dur = ros::Time::now()-begin;
-//        begin = ros::Time::now();
-//        if(DEBUG){
-//            ROS_INFO("freq = %fHz",1.0/dur.toSec());
-//        }
-
-
-        // Scaling
-
-        //ROS_INFO("Here 1");
+      // Print out frequency
+      //        ros::Duration dur = ros::Time::now()-begin;
+      //        begin = ros::Time::now();
+      //        if(DEBUG){
+      //            ROS_INFO("freq = %fHz",1.0/dur.toSec());
+      //        }
 
 
-        // Cropping
-//        if (!coordsAcquired)
-//        {
-//            imCenterX = imOrigScaled.size().width / 2;
-//            imCenterY = imOrigScaled.size().height / 2;
-//        }
-//
-//        //ROS_INFO("Here 2");
+      // Scaling
 
-        //  Converting color
-//        cv::cvtColor(imOrigScaled(frameRect),imCurr,CV_RGB2GRAY);
-        
+      //ROS_INFO("Here 1");
+
+
+      // Cropping
+      //        if (!coordsAcquired)
+      //        {
+      //            imCenterX = imOrigScaled.size().width / 2;
+      //            imCenterY = imOrigScaled.size().height / 2;
+      //        }
+      //
+      //        //ROS_INFO("Here 2");
+
+      //  Converting color
+      //        cv::cvtColor(imOrigScaled(frameRect),imCurr,CV_RGB2GRAY);
+
     }
 
-private:
+  private:
 
     cv::VideoCapture vc;
     std::stringstream VideoPath;
@@ -378,7 +407,6 @@ private:
     //std::vector<double> camRot;
     double gamma; // rotation of camera in the helicopter frame (positive)
 
-    int expectedWidth;
 
     int samplePointSize;
 
@@ -402,7 +430,7 @@ private:
     bool Allsac;
 
     double rollRate, pitchRate, yawRate;
-
+    std::mutex mutex_imu; 
 
     double max_px_speed_t;
     float maxSpeed;
@@ -416,16 +444,21 @@ private:
     int lastSpeedsSize;
     double analyseDuration;
     SparseOptFlowOcl *bmm;
-};
 
+    // thread
+    std::thread main_thread;
+};
 
 int main(int argc, char** argv)
 {
-    ros::init(argc, argv, "drone_detector");
-    ros::NodeHandle nodeA;
+  ros::init(argc, argv, "drone_detector");
+  ros::NodeHandle nodeA;
+  DroneDetector of(nodeA);
 
-    DroneDetector of(nodeA);
-    ros::spin();
-    return 0;
+  ROS_INFO("NODE initiated");
+
+  ros::spin();
+
+  return 0;
 }
 

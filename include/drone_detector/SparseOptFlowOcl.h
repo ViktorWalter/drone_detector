@@ -56,6 +56,8 @@ private:
     cv::UMat activationMap_prev_g;
     cv::UMat averageX_g;
     cv::UMat averageY_g;
+    cv::UMat egoX_g;
+    cv::UMat egoY_g;
     cl_mem foundPtsSize_g;
     cl_mem numFoundBlock_g;
     cl_mem numFoundBlock_prev_g;
@@ -86,6 +88,8 @@ private:
     cv::Mat imShowWindows;
     int baseWindowSize;
     cv::Size monitorSize;
+    
+    bool gotEgo;
 
     static bool sortWindows(AttentionWindow a, AttentionWindow b)
     {
@@ -140,6 +144,8 @@ private:
         const cv::UMat actMap,
         const cv::UMat avgX,
         const cv::UMat avgY,
+        const cv::UMat egoX,
+        const cv::UMat egoY,
         const std::vector<AttentionWindow> wnds
       );
     void drawOpticalFlow(
@@ -150,9 +156,13 @@ private:
         bool blankBG,
         cv::Mat& dst);
     void drawActivation(
-        const cv::Mat_<short>& actMap,
+        const cv::Mat_<ushort>& actMap,
         const cv::Mat_<short>& avgX,
         const cv::Mat_<short>& avgY
+        );
+    void drawEgoVectors(
+        const cv::Mat_<short>& egoX,
+        const cv::Mat_<short>& egoY
         );
     void drawWindows(std::vector<AttentionWindow> wnds);
 

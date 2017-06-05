@@ -16,9 +16,6 @@
   <arg name="camNum" default="0"/>
 
   <group ns="$(arg uav_name)">
-
-    <include file="$(find mbzirc_main)/launch/mavros_f550.launch" />
-
     <node name="drone_detector" pkg="drone_detector" type="drone_detector_node" output="screen" >
       <!-- launch-prefix="xterm -e gdb -args" -->
       <param name="DEBUG"		type="bool" value="$(arg DEBUG)"/> 
@@ -36,7 +33,9 @@
       <param name="useOdom"           type="bool" value="$(arg useOdom)"/>
       <param name="camNum"           type="int" value="$(arg camNum)"/>
 
-      <remap from="~imu" to="/uav1/mavros/imu/data"/>
+      <rosparam command="load" file="$(find mbzirc_main)/camera_info/mobius.yaml" />
+
+      <remap from="~imu" to="mavros/imu/data"/>
     </node>
 
   </group>

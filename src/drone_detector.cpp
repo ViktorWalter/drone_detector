@@ -116,6 +116,7 @@ class DroneDetector
 
       ROS_INFO("UseOdom? %s",useOdom?"true":"false");
       if (useOdom){
+        /* ROS_INFO("here"); */
         TiltSubscriber = private_node_handle.subscribe("imu", 1, &DroneDetector::TiltCallback, this, ros::TransportHints().tcpNoDelay());
       }
 
@@ -129,6 +130,7 @@ class DroneDetector
       private_node_handle.param("storeVideo", storeVideo, bool(false));
 
 
+      ROS_INFO("here");
 
 
 
@@ -146,6 +148,7 @@ class DroneDetector
       p1 = distCoeffs[2];
       p2 = distCoeffs[3];
 
+      ROS_INFO("here");
 
       private_node_handle.param("cameraRotated", cameraRotated, bool(true));
       //private_node_handle.getParam("camera_rotation_matrix/data", camRot);

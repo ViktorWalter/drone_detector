@@ -25,10 +25,10 @@
 #define minPointsThreshold 4
 #define addSelf 
 #define allPoints
-#define alphaWeight 05.0
+#define alphaWeight 0.0// 03.0
 #define alphaDiffClose 0.25
-#define lenWeight 0.3
-#define telepWeight 10.0
+#define lenWeight 0.1
+#define telepWeight 0.0// 10.0
 #define telepThreshold 6
 #define trustMultiplierCount 0.15
 #define trustMultiplierMemory 0.85
@@ -683,8 +683,6 @@ __kernel void BordersEgoMovement(
   float focalDistEffective = focalDist/(float)(outputFlowFieldSize-outputFlowFieldOverlay);
   float cxEffective = cx/(float)(outputFlowFieldSize-outputFlowFieldOverlay);
   float cyEffective = cy/(float)(outputFlowFieldSize-outputFlowFieldOverlay);
-  float xEffective = (float)blockX - cxEffective;
-  float yEffective = (float)blockY - cyEffective;
   
 
   float teleportation;
@@ -710,6 +708,8 @@ __kernel void BordersEgoMovement(
     /*   teleportation = telepWeight*(diffNum)/(float)(inNum[currIndexCenter]>prevNum[currIndexCenter]?inNum[currIndexCenter]:prevNum[currIndexCenter]); */
     /* else */
     /*   teleportation = 0; */
+  float xEffective = (float)blockX - cxEffective;
+  float yEffective = (float)blockY - cyEffective;
   float u_r =  (focalDistEffective*YawRate) + (yEffective*RollRate)   - ((xEffective*yEffective/focalDistEffective)*PitchRate) + ((xEffective*xEffective/focalDistEffective)*YawRate);
   float v_r = (-xEffective*RollRate) - (focalDistEffective*PitchRate) - ((yEffective*yEffective/focalDistEffective)*PitchRate) + ((xEffective*yEffective/focalDistEffective)*YawRate);
 
@@ -739,10 +739,10 @@ __kernel void BordersEgoMovement(
   float avgOutX = 0;
   float avgOutY = 0;
   int cntOut = 0;
-  /* float avgInX = inX[currIndexCenter]/(float)inNum[currIndexCenter] - u_r; */
-  /* float avgInY = inY[currIndexCenter]/(float)inNum[currIndexCenter] - v_r; */
   float avgInX = inX[currIndexCenter]/(float)inNum[currIndexCenter] ;
   float avgInY = inY[currIndexCenter]/(float)inNum[currIndexCenter] ;
+  avgInX =  avgInX - u_r;
+  avgInY =  avgInY - v_r;
 
   for (int j = -surroundRadius; j <= surroundRadius; j++) {
 #pragma unroll 1    
@@ -754,10 +754,19 @@ __kernel void BordersEgoMovement(
           continue;
         if ( (Y>=blockNumY) )
           break;
+        float xEffective_s = (float)X - cxEffective;
+        float yEffective_s = (float)Y - cyEffective;
+        float u_r_s =
+         (focalDistEffective*YawRate) + (yEffective_s*RollRate) 
+         - ((xEffective_s*yEffective_s/focalDistEffective)*PitchRate) + ((xEffective_s*xEffective_s/focalDistEffective)*YawRate);
+        float v_r_s =
+         (-xEffective_s*RollRate) - (focalDistEffective*PitchRate)
+         - ((yEffective_s*yEffective_s/focalDistEffective)*PitchRate) + ((xEffective_s*yEffective_s/focalDistEffective)*YawRate);
+
         currIndexSurr = mad24(Y,inStep,X);
         if (inNum[currIndexSurr] != 0){
-          avgOutX += inX[currIndexSurr]; 
-          avgOutY += inY[currIndexSurr]; 
+          avgOutX += inX[currIndexSurr]-(u_r_s*inNum[currIndexSurr]); 
+          avgOutY += inY[currIndexSurr]-(v_r_s*inNum[currIndexSurr]); 
           cntOut += inNum[currIndexSurr];
         }
       }
@@ -769,12 +778,12 @@ __kernel void BordersEgoMovement(
     avgOutY = 0;
   }
   else {
-    avgOutX = avgOutX/cntOut - u_r;
-    avgOutY = avgOutY/cntOut - u_r;
+    avgOutX = (avgOutX/cntOut);
+    avgOutY = (avgOutY/cntOut);
   }
 
   float lenOut = native_sqrt(avgOutX*avgOutX+avgOutY*avgOutY);
-  float lenIn  = native_sqrt(avgInX*avgInX  +avgInY*avgInY);
+  float lenIn  = native_sqrt(avgInX*avgInX+avgInY*avgInY);
   float lenDiff = fabs(lenOut - lenIn);
   
   float alphaDiff;

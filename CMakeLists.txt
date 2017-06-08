@@ -87,7 +87,7 @@ message("${OpenCL_INCLUDE_DIRS} ${OpenCL_LIBRARIES}")
 
 catkin_package(
    INCLUDE_DIRS include
-   LIBRARIES ${PROJECT_NAME} SparseOptFlowOcl
+   LIBRARIES ${PROJECT_NAME} sparseOptFlowOcl
    CATKIN_DEPENDS cv_bridge image_transport roscpp sensor_msgs std_msgs message_runtime
 #  DEPENDS system_lib
    DEPENDS Eigen
@@ -109,8 +109,8 @@ include_directories(
 )
 
 ## Declare a C++ library
-add_library(SparseOptFlowOcl src/SparseOptFlowOcl.cpp)
-target_link_libraries(SparseOptFlowOcl 
+add_library(sparseOptFlowOcl src/sparseOptFlowOcl.cpp)
+target_link_libraries(sparseOptFlowOcl 
 debug ${OpenCV_LIBRARIES} ${OpenCL_LIBRARIES} ${catkin_LIBRARIES})
 
 ## Declare a C++ executable
@@ -122,7 +122,7 @@ add_executable(drone_detector_node src/drone_detector.cpp)
 add_dependencies(drone_detector_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 add_custom_target(headers SOURCES ${HEADER_FILES} ${OPENCL_FILES} ${LAUNCHER_FILES} ${YAML_FILES})
-##configure_file(src/FSCoolPointOptFlow.cl ${CATKIN_DEVEL_PREFIX}/${CATKIN_PACKAGE_BIN_DESTINATION}/FSCoolPointOptFlow.cl COPYONLY)
+##configure_file(src/fSCoolPointOptFlow.cl ${CATKIN_DEVEL_PREFIX}/${CATKIN_PACKAGE_BIN_DESTINATION}/fSCoolPointOptFlow.cl COPYONLY)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(drone_detector_node
@@ -130,7 +130,7 @@ target_link_libraries(drone_detector_node
    ${OpenCV_LIBRARIES}
    ${EIGEN3_LIBRARIES}
 
-   SparseOptFlowOcl
+   sparseOptFlowOcl
 )
 # if(CUDA_FOUND)
 #   target_link_libraries(optic_flow_node

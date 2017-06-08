@@ -736,8 +736,8 @@ void SparseOptFlowOcl::showFlow(
 {
   cv::Mat out;
 
-  /* drawWindows(wnds); */
-  /* drawOpticalFlow(posx.getMat(cv::ACCESS_READ), posy.getMat(cv::ACCESS_READ), flowx.getMat(cv::ACCESS_READ), flowy.getMat(cv::ACCESS_READ), blankBG, out ); */
+  drawWindows(wnds);
+  drawOpticalFlow(posx.getMat(cv::ACCESS_READ), posy.getMat(cv::ACCESS_READ), flowx.getMat(cv::ACCESS_READ), flowy.getMat(cv::ACCESS_READ), blankBG, out );
   drawActivation(actMap.getMat(cv::ACCESS_READ),avgX.getMat(cv::ACCESS_READ),avgY.getMat(cv::ACCESS_READ));
   if (gotEgo)
     drawEgoVectors(egoX.getMat(cv::ACCESS_READ),egoY.getMat(cv::ACCESS_READ));
@@ -816,12 +816,12 @@ void SparseOptFlowOcl::drawActivation(
   int m = cellSize/2;
   for (int j = 0; j < actMap.rows; j++) {
     for (int i = 0; i < actMap.cols; i++) {
-      /* cv::circle( */
-      /*     imView, */
-      /*     cv::Point2i(i*d+m,j*d+m), */
-      /*     (actMap.at<ushort>(j,i)), */
-      /*     cv::Scalar(0,0,255), */
-      /*     2); */
+      cv::circle(
+          imView,
+          cv::Point2i(i*d+m,j*d+m),
+          (actMap.at<ushort>(j,i)),
+          cv::Scalar(0,0,255),
+          2);
       //      if (activationmap.at<short>(j,i) > 20){
       //        cv::waitKey(0);
       //      cv::circle(
@@ -893,6 +893,6 @@ void SparseOptFlowOcl::drawWindows(std::vector<AttentionWindow> wnds)
     /* std::sprintf(wndname,"cv_fl_%d",i); */
     imView(rect).copyTo(imShowWindows(cv::Rect(baseWindowSize*i,0,rect.width,rect.height)));
   }
-  cv::imshow("cv_fl_windows", imShowWindows);
+  /* cv::imshow("cv_fl_windows", imShowWindows); */
 }
 

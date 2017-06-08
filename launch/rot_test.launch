@@ -12,7 +12,7 @@
   <arg name="VideoNumber" default="1"/>
   <arg name="cellSize" default="64"/>
   <arg name="cellOverlay" default="16"/>
-  <arg name="surroundRadius" default="3"/>
+  <arg name="surroundRadius" default="5"/>
   <arg name="camNum" default="0"/>
 
   <group ns="$(arg uav_name)">

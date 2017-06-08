@@ -1,4 +1,4 @@
-#include "../include/drone_detector/SparseOptFlowOcl.h"
+#include "../include/drone_detector/sparseOptFlowOcl.h"
 #include <ostream>
 #include <dirent.h>
 #include <algorithm>
@@ -150,7 +150,7 @@ int viableSR = ((viableSD % 2)==1) ? ((viableSD-1)/2) : ((viableSD-2)/2);
 FILE *program_handle;
 size_t program_size;
 //ROS_INFO((ros::package::getPath("optic_flow")+"/src/FastSpacedBMMethod.cl").c_str());
-program_handle = fopen((ros::package::getPath("drone_detector")+"/src/FSCoolPointOptFlow.cl").c_str(),"r");
+program_handle = fopen((ros::package::getPath("drone_detector")+"/src/fSCoolPointOptFlow.cl").c_str(),"r");
 if(program_handle == NULL)
 {
   std::cout << "Couldn't find the program file" << std::endl;
@@ -446,6 +446,13 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
 
   ROS_INFO("Number of found points for next phase: %d",foundPtsSize);
 
+
+  clock_t begin = clock();
+  clock_t end = clock();
+  double elapsed_secs;
+  int gridC_width_g = gridC[0];
+  int i;
+
   if ( (foundPtsSize > 0) && (!first) && (true))
   {
     int divider = EfficientWGSize;
@@ -488,7 +495,6 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     int elemSize_g = (int)imCurr_g.elemSize();
     //    ROS_INFO("offset: %d, step: %d, channels: %d",(int)imCurr_g.offset,(int)imCurr_g.step,elemSize_g);
 
-    int i;
     i = k_OptFlow.set(0, cv::ocl::KernelArg::PtrReadOnly(imCurr_g));
     i = k_OptFlow.set(i, cv::ocl::KernelArg::ReadOnly(imPrev_g));
     i = k_OptFlow.set(i, elemSize_g);
@@ -508,14 +514,13 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
     i = k_OptFlow.set(i, cellFlowNum_g);
     i = k_OptFlow.set(i, gridC_width_g);
 
-    clock_t begin = clock();
 
     k_OptFlow.run(2,globalB,blockB,true);
 
-    clock_t end = clock();
-    double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
+    elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
     /* ROS_INFO("OptFlow took %f seconds",elapsed_secs); */
 
+  }
 
     float freq_g = 1/dt;
     float cx_g = (float)cx;
@@ -578,7 +583,7 @@ std::vector<cv::Point2f> SparseOptFlowOcl::processImage(
       /* ROS_INFO("BordersEgoMovement took %f seconds",elapsed_secs); */
     }
 
-  }     
+       
 
   cv::Mat scaledActMap;
   activationMap_g.convertTo(scaledActMap,CV_8UC1);

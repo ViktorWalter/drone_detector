@@ -1,10 +1,12 @@
 #define SourceDir "/home/viktor/ros_workspace/src/mbzirc/ros_nodes/drone_detector/"
 
 #define maxTerraRange 8.0
+#define camera_delay 0.50
 
 
 #include <ros/ros.h>
 #include <tf/tf.h>
+#include <tf/transform_listener.h>
 #include <cv_bridge/cv_bridge.h>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/core/core.hpp>
@@ -17,7 +19,7 @@
 #include <thread>
 #include <mutex>
 
-#include "drone_detector/SparseOptFlowOcl.h"
+#include "drone_detector/sparseOptFlowOcl.h"
 //#include <opencv2/gpuoptflow.hpp>
 //#include <opencv2/gpulegacy.hpp>
 //#include <opencv2/gpuimgproc.hpp>
@@ -39,6 +41,7 @@ class DroneDetector
     DroneDetector(ros::NodeHandle& node)
     {
       ros::NodeHandle private_node_handle("~");
+      private_node_handle.param("uav_name", uav_name, std::string());
 
       private_node_handle.param("FromBag", FromBag, bool(true));
       private_node_handle.param("Flip", Flip, bool(false));
@@ -116,7 +119,11 @@ class DroneDetector
 
       ROS_INFO("UseOdom? %s",useOdom?"true":"false");
       if (useOdom){
-        /* ROS_INFO("here"); */
+
+        yawRate = 0.0;
+        pitchRate = 0.0;
+        rollRate = 0.0;
+        listener = new tf::TransformListener();
         TiltSubscriber = private_node_handle.subscribe("imu", 1, &DroneDetector::TiltCallback, this, ros::TransportHints().tcpNoDelay());
       }
 
@@ -128,9 +135,6 @@ class DroneDetector
 
 
       private_node_handle.param("storeVideo", storeVideo, bool(false));
-
-
-      ROS_INFO("here");
 
 
 
@@ -148,7 +152,6 @@ class DroneDetector
       p1 = distCoeffs[2];
       p2 = distCoeffs[3];
 
-      ROS_INFO("here");
 
       private_node_handle.param("cameraRotated", cameraRotated, bool(true));
       //private_node_handle.getParam("camera_rotation_matrix/data", camRot);
@@ -267,15 +270,33 @@ class DroneDetector
     }
 
     void TiltCallback(const sensor_msgs::ImuConstPtr& imu_msg){
+      imu_register.insert(imu_register.begin(),*imu_msg);
+      bool caughtUp = false;
+      bool reachedEnd = false;
+      while (!reachedEnd) {
+        if ((ros::Time::now() - imu_register.back().header.stamp) > ros::Duration(camera_delay)){
+          caughtUp = true;
+          imu_register.pop_back();
+        }
+        else 
+          reachedEnd = true;
+      }
+
+        ros::Duration dur = (ros::Time::now() - imu_register.back().header.stamp);
+          ROS_INFO("here, back = %f, buffer = %d",dur.toSec(), (int)imu_register.size());
+          
+      if (!caughtUp)
+        return;
+
       mutex_imu.lock();
       {
-        yawRate = imu_msg->angular_velocity.z;
-        pitchRate = imu_msg->angular_velocity.y;
-        rollRate = imu_msg->angular_velocity.x;
+        yawRate = imu_register.back().angular_velocity.z;
+        pitchRate = imu_register.back().angular_velocity.y;
+        rollRate = imu_register.back().angular_velocity.x;
       }
       mutex_imu.unlock();
 
-      /* ROS_INFO( "Y:%f, P:%f, R:%f", yawRate, pitchRate, rollRate); */
+      /* ROS_INFO( "Y:%f, P:%f, R:%f, B:%d", yawRate, pitchRate, rollRate, (int)(imu_register.size())); */
     }
 
     void ProcessCompressed(const sensor_msgs::CompressedImageConstPtr& image_msg)
@@ -385,6 +406,8 @@ class DroneDetector
     ros::Subscriber CamInfoSubscriber;
     ros::Subscriber TiltSubscriber;
     ros::Subscriber ImageSubscriber;
+    
+    tf::TransformListener *listener;
 
 
     cv::Mat imOrigScaled;
@@ -440,6 +463,7 @@ class DroneDetector
     float maxAccel;
     bool checkAccel;
 
+    std::string uav_name;
 
     ros::Time odomSpeedTime;
     float speed_noise;
@@ -450,6 +474,8 @@ class DroneDetector
 
     // thread
     std::thread main_thread;
+
+    std::vector<sensor_msgs::Imu> imu_register;
 };
 
 int main(int argc, char** argv)

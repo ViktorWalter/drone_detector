@@ -17,7 +17,7 @@
 #define FastThresh 20
 #define CornerArraySize 10
 #define maxNumOfBlocks 2000
-#define shiftRadius 2
+//#define shiftRadius 2
 #define maxDistMultiplier 1.5
 #define threadsPerCornerPoint 32
 #define distanceWeight (0.03*elemSize)
@@ -25,7 +25,7 @@
 #define minPointsThreshold 4
 #define addSelf 
 #define allPoints
-#define alphaWeight 0.0// 03.0
+#define alphaWeight 03.0
 #define alphaDiffClose 0.25
 #define lenWeight 0.1
 #define telepWeight 0.0// 10.0
@@ -266,6 +266,13 @@ __kernel void OptFlowReduced(
 
   barrier(CLK_LOCAL_MEM_FENCE);
   //First gather up the previous corner points that are in the vicinity
+  
+  int shiftRadius;
+  if (prevFoundNum[currLine] > 20) {
+    shiftRadius = 2;}
+  else  {
+    shiftRadius = 1;}
+
   int blockShiftX = -shiftRadius;
   int blockShiftY = -shiftRadius;
   int colNum = 0;
@@ -806,14 +813,14 @@ __kernel void BordersEgoMovement(
 
 
 
-  float trustCount = inNum[currIndexCenter]*trustMultiplierCount;
+//  float trustCount = inNum[currIndexCenter]*trustMultiplierCount;
 //  float Memory = (prevA[estimPrevCellIndex]>3 ?
 //      fmin(prevA[estimPrevCellIndex]*trustMultiplierMemory,2):
 //      0.0f);
   int activation = (int)(
       (perFrame)*
       (freq)*
-      (trustCount)*
+////////////////      (trustCount)*
       (alphaDiff>alphaDiffClose?
         (float)(alphaDiff*alphaWeight):
         (float)(lenDiff*lenWeight)

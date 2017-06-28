@@ -55,6 +55,7 @@
       <remap from="odometry" to="mbzirc_odom/new_odom"/>
       <remap from="camera" to="$(arg Topic)"/>
 
+      <rosparam command="load" file="$(find drone_detector)/yaml/mobius.yaml" />
 
     </node>
   </group>

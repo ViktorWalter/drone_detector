@@ -35,7 +35,7 @@
       <param name="useOdom"           type="bool" value="$(arg useOdom)"/>
       <param name="camNum"           type="int" value="$(arg camNum)"/>
 
-      <rosparam command="load" file="$(find mbzirc_main)/camera_info/mobius.yaml" />
+      <rosparam command="load" file="$(find drone_detector)/yaml/mobius.yaml" />
 
 
     </node>
